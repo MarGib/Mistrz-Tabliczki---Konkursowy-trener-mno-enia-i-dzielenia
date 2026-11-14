@@ -268,6 +268,8 @@ function loadInitialStore(): StoreState {
   return parseInitialStoreState(null);
 }
 
+type LinkResult = 'synced' | 'needs-password' | 'error' | 'skip';
+
 export function useAppStore() {
   const [store, setStore] = useState<StoreState>(loadInitialStore);
   const storeRef = useRef<StoreState>(store);
@@ -298,8 +300,11 @@ export function useAppStore() {
   const joinGroupRef = useRef<(code: string) => Promise<{ ok: boolean; error?: string }>>(
     async () => ({ ok: false })
   );
-  const linkAccountRef = useRef<(profileId: string, password?: string) => Promise<void>>(
-    async () => {}
+  const loginToCloudAccountRef = useRef<
+    (login: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  >(async () => ({ ok: false }));
+  const linkAccountRef = useRef<(profileId: string, password?: string) => Promise<LinkResult>>(
+    async () => 'skip'
   );
   const setSyncFor = useCallback((profileId: string, next: AccountSyncState) => {
     setAccountSync((prev) => ({ ...prev, [profileId]: next }));
@@ -1017,7 +1022,16 @@ export function useAppStore() {
         if (target && signedIn && target.passwordHash) {
           void changeAccountPassword(profileLogin(target), target.passwordHash).catch(() => {});
         } else {
-          window.setTimeout(() => void linkAccountRef.current(profileId, trimmed), 0);
+          window.setTimeout(async () => {
+            const linked = await linkAccountRef.current(profileId, trimmed);
+            if (linked !== 'needs-password') return;
+            // Konto w chmurze założono na innym urządzeniu (inny identyfikator profilu) —
+            // zaloguj zwykłą drogą: login + hasło, i połącz wyniki z tego urządzenia.
+            const res = await loginToCloudAccountRef.current(normalizeLogin(login || target?.name || ""), trimmed);
+            if (!res.ok) {
+              setSyncFor(profileId, { state: 'needs-password', message: res.error ?? 'Nieprawidłowe hasło.' });
+            }
+          }, 0);
         }
       }
     },
@@ -1211,10 +1225,10 @@ export function useAppStore() {
    * dzięki czemu przejście na nową bazę odbywa się po cichu, bez udziału dziecka.
    */
   const linkAccount = useCallback(
-    async (profileId: string, _password?: string) => {
+    async (profileId: string, _password?: string): Promise<LinkResult> => {
       void _password;
       const p = storeRef.current.profiles.find((x) => x.id === profileId);
-      if (!p || !p.passwordHash) return;
+      if (!p || !p.passwordHash) return 'skip';
       const login = profileLogin(p);
       setSyncFor(profileId, { state: 'syncing' });
       try {
@@ -1224,7 +1238,7 @@ export function useAppStore() {
             pendingPasswordsRef.current.delete(profileId);
             setSyncFor(profileId, { state: 'synced' });
             void ensureCircles(profileId);
-            return;
+            return 'synced';
           }
         }
         const res = await withTimeout(
@@ -1245,6 +1259,7 @@ export function useAppStore() {
         pendingPasswordsRef.current.delete(profileId);
         setSyncFor(profileId, { state: 'synced' });
         void ensureCircles(profileId);
+        return 'synced';
       } catch (err) {
         const code = (err as { code?: string })?.code ?? '';
         if (code === 'login-taken') {
@@ -1252,10 +1267,11 @@ export function useAppStore() {
             state: 'needs-password',
             message: 'Wpisz hasło, aby wznowić synchronizację.',
           });
-          return;
+          return 'needs-password';
         }
         pendingPasswordsRef.current.set(profileId, '');
         setSyncFor(profileId, { state: 'error', message: describeAccountError(err) });
+        return 'error';
       }
     },
     [mergeCloudIntoLocal, setSyncFor, ensureCircles]
@@ -1468,8 +1484,8 @@ export function useAppStore() {
             : [...prev.ownedProfileIds, local.id],
           hasSelectedProfile: true,
         }));
-        await linkAccount(local.id, pwd);
-        if (accountSyncRef.current[local.id]?.state !== 'needs-password') {
+        const linked = await linkAccount(local.id, pwd);
+        if (linked !== 'needs-password') {
           void logLoginEvent(loginInput, true, 'ok');
           return { ok: true };
         }
@@ -1539,6 +1555,8 @@ export function useAppStore() {
     },
     [linkAccount, mergeCloudIntoLocal, setSyncFor, ensureCircles]
   );
+
+  loginToCloudAccountRef.current = loginToCloudAccount;
 
   /** Wyloguj konto z tego urządzenia. Konto w chmurze zostaje — można zalogować się ponownie. */
   const logoutAccount = useCallback(
