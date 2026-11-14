@@ -82,6 +82,25 @@ export function buildFactCatalog(mode: OperationMode, maxRange: number): MathPro
 /**
  * Selects an adaptive series of `count` problems using SM-2 due items, difficult/slow items, and variety.
  */
+/**
+ * Rodzina działania: 7×8 → 8×7, 56:7, 56:8. Mnożenie i dzielenie ćwiczone razem wzmacniają się nawzajem.
+ */
+export function factFamily(id: string): string[] {
+  const mul = id.match(/^mul:(\d+)x(\d+)$/);
+  const div = id.match(/^div:(\d+)\/(\d+)$/);
+  let a: number, b: number;
+  if (mul) {
+    a = Number(mul[1]);
+    b = Number(mul[2]);
+  } else if (div) {
+    b = Number(div[2]);
+    a = Number(div[1]) / b;
+  } else return [];
+  if (!Number.isInteger(a) || a < 1 || b < 1) return [];
+  const p = a * b;
+  return Array.from(new Set([`mul:${a}x${b}`, `mul:${b}x${a}`, `div:${p}/${a}`, `div:${p}/${b}`])).filter((x) => x !== id);
+}
+
 export function selectAdaptiveSeries(options: {
   mode: OperationMode;
   maxRange: number;
@@ -127,6 +146,16 @@ export function selectAdaptiveSeries(options: {
         if (mem) {
           pushUnique(createProblem(mem.op, mem.a, mem.b));
         }
+      }
+    }
+  }
+
+  // 1b. Rodziny działań z powtórki (tylko w trybie mieszanym, gdy jest miejsce)
+  if (focusFactIds && focusFactIds.length > 0 && mode === 'mixed') {
+    for (const id of focusFactIds) {
+      for (const fam of factFamily(id)) {
+        const p = catalogMap.get(fam);
+        if (p) pushUnique(p);
       }
     }
   }

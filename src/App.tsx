@@ -161,7 +161,8 @@ export default function App() {
       title,
       mode: 'mixed',
       maxRange: activeProfile.settings.maxRange,
-      taskCount: Math.max(6, focusIds.length),
+      // miejsce także na rodziny działań (7×8 → 8×7, 56:7, 56:8)
+      taskCount: Math.min(14, Math.max(8, focusIds.length * 2)),
       focusFactIds: focusIds,
     });
   };

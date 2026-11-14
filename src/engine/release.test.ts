@@ -94,3 +94,15 @@ test('Graj dalej: nowy gracz dostaje etap 1, po ścieżce — Wyzwanie Mistrza',
   const done = { ...p, completedStageIds: all, unlockedStageIds: all };
   assert.equal(chooseNextStep(done).kind, 'master');
 });
+
+import { factFamily, selectAdaptiveSeries } from './problemGenerator';
+
+test('Rodziny działań: 7×8 → 8×7, 56:7, 56:8', () => {
+  assert.deepEqual(new Set(factFamily('mul:7x8')), new Set(['mul:8x7', 'div:56/7', 'div:56/8']));
+  assert.deepEqual(new Set(factFamily('div:56/8')), new Set(['mul:7x8', 'mul:8x7', 'div:56/7']));
+  assert.deepEqual(factFamily('mul:6x6'), ['div:36/6']);
+  const series = selectAdaptiveSeries({ mode: 'mixed', maxRange: 100, count: 8, memories: {}, focusFactIds: ['mul:7x8'], rng: () => 0.5 });
+  const ids = series.map((p) => p.id);
+  for (const id of ['mul:7x8', 'mul:8x7', 'div:56/7', 'div:56/8']) assert.ok(ids.includes(id), `${id} w serii`);
+  assert.equal(series.length, 8);
+});
