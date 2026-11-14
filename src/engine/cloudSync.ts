@@ -14,7 +14,7 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
-import { OperationType, auth, db, googleProvider, handleFirestoreError } from '../firebase';
+import { OperationType, auth, db, googleProvider, handleFirestoreError, isFirebaseConfigured } from '../firebase';
 import type { FamilyNotification, UserProfile } from '../types/math';
 import {
   generateJoinCode,
@@ -36,6 +36,9 @@ export interface CloudSessionMeta {
 }
 
 export async function signInWithGoogleCloud(): Promise<User> {
+  if (!isFirebaseConfigured) {
+    throw new Error('Logowanie i synchronizacja w chmurze są niedostępne w tej wersji strony.');
+  }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
 }

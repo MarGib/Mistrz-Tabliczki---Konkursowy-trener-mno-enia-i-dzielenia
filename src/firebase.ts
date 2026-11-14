@@ -1,10 +1,38 @@
 import { initializeApp } from 'firebase/app';
 import { GoogleAuthProvider, getAuth } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+
+type FirebaseAppletConfig = {
+  apiKey: string;
+  authDomain?: string;
+  projectId: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId: string;
+  measurementId?: string;
+  firestoreDatabaseId?: string;
+};
+
+// Plik firebase-applet-config.json nie jest w repozytorium (generuje go AI Studio).
+// W GitHub Actions tworzy go workflow z sekretu FIREBASE_APPLET_CONFIG.
+// Gdy go brak, aplikacja działa w trybie lokalnym (bez logowania i synchronizacji w chmurze).
+const configModules = import.meta.glob<{ default: FirebaseAppletConfig }>(
+  '../firebase-applet-config.json',
+  { eager: true }
+);
+const loadedConfig = Object.values(configModules)[0]?.default;
+
+export const isFirebaseConfigured = Boolean(loadedConfig?.apiKey && loadedConfig?.projectId);
+
+const firebaseConfig: FirebaseAppletConfig = loadedConfig ?? {
+  apiKey: 'not-configured',
+  authDomain: 'not-configured.firebaseapp.com',
+  projectId: 'not-configured',
+  appId: 'not-configured',
+};
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -61,7 +89,7 @@ export function handleFirestoreError(
 }
 
 async function testConnection() {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !isFirebaseConfigured) return;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
