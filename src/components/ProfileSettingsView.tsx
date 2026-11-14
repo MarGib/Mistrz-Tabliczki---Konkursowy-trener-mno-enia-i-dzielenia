@@ -41,6 +41,7 @@ import type {
   UserProfile,
 } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
+import { PasswordInput } from './PasswordInput';
 import { AvatarStudio } from './AvatarStudio';
 
 interface ProfileSettingsViewProps {
@@ -652,9 +653,9 @@ export function ProfileSettingsView({
                 >
                   {activeHasPassword ? 'Nowe hasło / PIN (opcjonalnie)' : 'Ustaw hasło lub PIN'}
                 </label>
-                <input
+                <PasswordInput
                   id="account-password-input"
-                  type="password"
+                 
                   value={passwordEdit}
                   onChange={(e) => {
                     setPasswordEdit(e.target.value);
@@ -793,8 +794,8 @@ export function ProfileSettingsView({
                         className="mt-2 pt-2 border-t border-[var(--th-border)] space-y-2"
                       >
                         <div className="flex items-center gap-2">
-                          <input
-                            type="password"
+                          <PasswordInput
+                           
                             value={unlockPwdInput}
                             onChange={(e) => {
                               setUnlockPwdInput(e.target.value);
@@ -860,9 +861,9 @@ export function ProfileSettingsView({
                     >
                       Hasło / PIN (min. 4 znaki)
                     </label>
-                    <input
+                    <PasswordInput
                       id="new-profile-password"
-                      type="password"
+                     
                       placeholder="np. 1234"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}

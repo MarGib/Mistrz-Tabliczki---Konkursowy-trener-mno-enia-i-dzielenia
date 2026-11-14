@@ -23,6 +23,7 @@ import { computeUserLevel } from '../engine/spacedRepetition';
 import type { CloudSyncStatus } from '../store/useAppStore';
 import type { DeviceProfile, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
+import { PasswordInput } from './PasswordInput';
 
 interface FamilyWelcomeGateProps {
   ownedProfiles: UserProfile[];
@@ -273,9 +274,9 @@ export function FamilyWelcomeGate({
                     ? 'Twoje hasło lub PIN'
                     : 'Ustaw hasło lub PIN (opcjonalnie, min. 3 znaki)'}
                 </label>
-                <input
+                <PasswordInput
                   id="gate-password-input"
-                  type="password"
+                 
                   value={passwordInput}
                   onChange={(e) => {
                     setPasswordInput(e.target.value);
@@ -498,9 +499,9 @@ export function FamilyWelcomeGate({
                     >
                       Hasło lub PIN (min. 4 znaki) *
                     </label>
-                    <input
+                    <PasswordInput
                       id="welcome-new-password"
-                      type="password"
+                     
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="np. 1234"
@@ -626,8 +627,8 @@ export function FamilyWelcomeGate({
                         aria-label="Login"
                         className="w-full min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] text-sm font-semibold"
                       />
-                      <input
-                        type="password"
+                      <PasswordInput
+                       
                         value={existingPassword}
                         onChange={(e) => {
                           setExistingPassword(e.target.value);

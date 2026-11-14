@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExerciseArena } from './components/ExerciseArena';
 import { GroupsPanel } from './components/GroupsPanel';
+import { SyncPrompt } from './components/SyncPrompt';
 import { FamilyWelcomeGate } from './components/FamilyWelcomeGate';
 import { NotificationCenter } from './components/NotificationCenter';
 import { ProfileSettingsView } from './components/ProfileSettingsView';
@@ -211,6 +212,14 @@ export default function App() {
           )}
 
           <main className={`flex-1 ${!activeSeries ? 'pb-20 md:pb-8' : 'pb-6'}`}>
+            {!activeSeries && (
+              <SyncPrompt
+                key={activeProfile.id}
+                profile={activeProfile}
+                state={accountSync[activeProfile.id]}
+                onSubmitPassword={setProfileCredentials}
+              />
+            )}
             {activeSeries ? (
               <ExerciseArena
                 key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}

@@ -126,7 +126,7 @@ export function describeAccountError(err: unknown): string {
     code === 'auth/user-not-found' ||
     code === 'auth/invalid-login-credentials'
   ) {
-    return 'Nieprawidłowy login lub hasło.';
+    return 'Nieprawidłowy login lub hasło. Jeśli konto założono wcześniej na innym urządzeniu, otwórz je tam i wpisz hasło, aby włączyć synchronizację.';
   }
   if (code === 'auth/too-many-requests') {
     return 'Za dużo prób logowania. Odczekaj chwilę i spróbuj ponownie.';
