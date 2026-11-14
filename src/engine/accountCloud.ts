@@ -36,9 +36,10 @@ import {
   setDoc,
   writeBatch,
 } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseConfig from '../../firebase-accounts-config.json';
+import legacyConfig from '../../firebase-applet-config.json';
 import type { CircleMembership, UserProfile } from '../types/math';
-import { normalizeLogin } from './accountSecurity';
+import { hashAccountPassword, normalizeLogin } from './accountSecurity';
 import {
   type ArenaPlayerCard,
   profileToArenaPlayerCard,
@@ -72,7 +73,25 @@ function getHandle(login: string): AccountHandle {
   const handle: AccountHandle = {
     app,
     auth: getAuth(app),
-    db: getFirestore(app, firebaseConfig.firestoreDatabaseId),
+    db: getFirestore(app),
+  };
+  handles.set(name, handle);
+  return handle;
+}
+
+/**
+ * Stary projekt (AI Studio, wspólny limit zapisów). Używany wyłącznie do ODCZYTU kont,
+ * które nie zdążyły jeszcze przejść do nowej bazy (logowanie na nowym urządzeniu).
+ */
+function getLegacyHandle(login: string): AccountHandle {
+  const name = `legacy-${normalizeLogin(login)}`;
+  const cached = handles.get(name);
+  if (cached) return cached;
+  const app = getApps().some((a) => a.name === name) ? getApp(name) : initializeApp(legacyConfig, name);
+  const handle: AccountHandle = {
+    app,
+    auth: getAuth(app),
+    db: getFirestore(app, legacyConfig.firestoreDatabaseId),
   };
   handles.set(name, handle);
   return handle;
@@ -84,9 +103,21 @@ export function loginToEmail(login: string): string {
   return `u-${local}@${EMAIL_DOMAIN}`;
 }
 
-/** Firebase wymaga min. 6 znaków — PIN-y dzieci bywają krótsze, więc hasło techniczne jest dłuższe. */
-function toFirebasePassword(login: string, password: string): string {
+/** Hasło techniczne STAREGO projektu (tylko do odczytu starych kont). */
+function toLegacyFirebasePassword(login: string, password: string): string {
   return `mt#${password}#${normalizeLogin(login)}`;
+}
+
+/**
+ * Hasło techniczne nowej bazy — wyprowadzone ze skrótu hasła, który urządzenie i tak przechowuje.
+ * Dzięki temu konto przechodzi do nowej bazy samo, bez ponownego wpisywania hasła przez dziecko.
+ */
+function secretFromHash(passwordHash: string): string {
+  return `mt#h#${passwordHash}`;
+}
+
+function loginKey(login: string): string {
+  return normalizeLogin(login).slice(0, 40);
 }
 
 /** Czeka, aż Firebase odtworzy zapamiętaną sesję konta (po odświeżeniu strony). */
@@ -126,7 +157,7 @@ export function describeAccountError(err: unknown): string {
     code === 'auth/user-not-found' ||
     code === 'auth/invalid-login-credentials'
   ) {
-    return 'Nieprawidłowy login lub hasło. Jeśli konto założono wcześniej na innym urządzeniu, otwórz je tam i wpisz hasło, aby włączyć synchronizację.';
+    return 'Nieprawidłowy login lub hasło.';
   }
   if (code === 'auth/too-many-requests') {
     return 'Za dużo prób logowania. Odczekaj chwilę i spróbuj ponownie.';
@@ -161,57 +192,131 @@ function accountDocPayload(uid: string, profile: UserProfile): Record<string, un
   };
 }
 
+async function writeLoginDoc(db: Firestore, login: string, uid: string, profileId: string): Promise<void> {
+  const ref = doc(db, 'logins', loginKey(login));
+  const snap = await getDoc(ref).catch(() => null);
+  const data = snap?.exists() ? snap.data() : null;
+  if (data && data.uid === uid && data.profileId === profileId) return;
+  await setDoc(ref, { uid, profileId, createdAt: serverTimestamp() });
+}
+
 /**
- * Zakłada konto w chmurze albo loguje do istniejącego (gdy login już jest „nasz”).
- * Zwraca uid konta Firebase.
+ * Konto w nowej bazie: zakłada je (pierwsze urządzenie) albo loguje (kolejne).
+ * Nie potrzebuje hasła — wystarczy skrót hasła zapisany w profilu.
  */
-export async function registerOrSignInAccount(
-  profile: UserProfile,
-  password: string
+export async function ensureAccount(
+  profile: UserProfile
 ): Promise<{ uid: string; created: boolean; cloudProfile: UserProfile | null }> {
+  if (!profile.passwordHash) throw new Error('Konto nie ma hasła.');
   const login = normalizeLogin(profile.login || profile.name);
   const { auth, db } = getHandle(login);
   const email = loginToEmail(login);
-  const fbPassword = toFirebasePassword(login, password);
+  const secret = secretFromHash(profile.passwordHash);
 
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, email, fbPassword);
-    await setDoc(doc(db, 'accounts', cred.user.uid), accountDocPayload(cred.user.uid, profile));
-    return { uid: cred.user.uid, created: true, cloudProfile: null };
-  } catch (err) {
-    if (errorCode(err) !== 'auth/email-already-in-use') throw err;
+  if (auth.currentUser) {
+    await auth.currentUser.getIdToken(true).catch(async () => {
+      await signOut(auth).catch(() => {});
+    });
   }
-
-  // Login istnieje — jeśli hasło pasuje, to to samo konto (np. z innego urządzenia).
-  let cred;
-  try {
-    cred = await signInWithEmailAndPassword(auth, email, fbPassword);
-  } catch (err) {
-    const code = errorCode(err);
-    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/invalid-login-credentials') {
-      const taken = new Error('Ten login jest już zajęty przez inne konto. Wybierz inny login.');
-      (taken as Error & { code?: string }).code = 'login-taken';
-      throw taken;
+  if (!auth.currentUser) {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, secret);
+      await setDoc(doc(db, 'accounts', cred.user.uid), accountDocPayload(cred.user.uid, profile));
+      await writeLoginDoc(db, login, cred.user.uid, profile.id);
+      return { uid: cred.user.uid, created: true, cloudProfile: null };
+    } catch (err) {
+      if (errorCode(err) !== 'auth/email-already-in-use') throw err;
     }
-    throw err;
+    try {
+      await signInWithEmailAndPassword(auth, email, secret);
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/invalid-login-credentials') {
+        const taken = new Error('Ten login jest już zajęty przez inne konto albo hasło zmieniono na innym urządzeniu. Wpisz hasło ponownie.');
+        (taken as Error & { code?: string }).code = 'login-taken';
+        throw taken;
+      }
+      throw err;
+    }
   }
-  const snap = await getDoc(doc(db, 'accounts', cred.user.uid));
-  const cloudProfile = snap.exists() ? (snap.data().profile as UserProfile) : null;
-  return { uid: cred.user.uid, created: false, cloudProfile };
+  const uid = auth.currentUser!.uid;
+  const snap = await getDoc(doc(db, 'accounts', uid));
+  void writeLoginDoc(db, login, uid, profile.id).catch(() => {});
+  return { uid, created: false, cloudProfile: snap.exists() ? (snap.data().profile as UserProfile) : null };
 }
 
-/** Logowanie na nowym urządzeniu: login + hasło → profil z chmury. */
+/** Zgodność wsteczna: dawniej konto zakładano z hasłem w ręku. */
+export async function registerOrSignInAccount(
+  profile: UserProfile,
+  _password?: string
+): Promise<{ uid: string; created: boolean; cloudProfile: UserProfile | null }> {
+  void _password;
+  return ensureAccount(profile);
+}
+
+function invalidCredentials(): Error {
+  const e = new Error('Nieprawidłowy login lub hasło.');
+  (e as Error & { code?: string }).code = 'auth/invalid-credential';
+  return e;
+}
+
+/**
+ * Logowanie na nowym urządzeniu: login + hasło → profil z chmury.
+ *  1) nowa baza (logins/{login} podaje identyfikator profilu potrzebny do skrótu hasła),
+ *  2) jeśli konta tam jeszcze nie ma — odczyt ze starej bazy i przeniesienie do nowej.
+ */
 export async function signInAccountAndFetch(
   loginInput: string,
   password: string
-): Promise<{ uid: string; profile: UserProfile | null }> {
+): Promise<{ uid: string; profile: UserProfile | null; profileId: string; passwordHash: string }> {
   const login = normalizeLogin(loginInput);
   const { auth, db } = getHandle(login);
-  const cred = await signInWithEmailAndPassword(auth, loginToEmail(login), toFirebasePassword(login, password));
-  const snap = await getDoc(doc(db, 'accounts', cred.user.uid));
-  // Konto istnieje, ale profil nie zdążył się zapisać (np. przy przeciążonej bazie) — zaczniemy od nowa,
-  // a wyniki z pierwszego urządzenia dołączą się przy jego najbliższej synchronizacji.
-  return { uid: cred.user.uid, profile: snap.exists() ? (snap.data().profile as UserProfile) : null };
+  const loginSnap = await getDoc(doc(db, 'logins', loginKey(login)));
+  if (loginSnap.exists()) {
+    const profileId = String(loginSnap.data().profileId ?? '');
+    const passwordHash = hashAccountPassword(password, profileId);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, loginToEmail(login), secretFromHash(passwordHash));
+      const snap = await getDoc(doc(db, 'accounts', cred.user.uid));
+      return {
+        uid: cred.user.uid,
+        profile: snap.exists() ? (snap.data().profile as UserProfile) : null,
+        profileId,
+        passwordHash,
+      };
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/invalid-login-credentials') {
+        throw invalidCredentials();
+      }
+      throw err;
+    }
+  }
+
+  // Konto jeszcze w starej bazie — odczytaj i przenieś.
+  const legacy = getLegacyHandle(login);
+  let legacyProfile: UserProfile | null = null;
+  try {
+    const cred = await signInWithEmailAndPassword(
+      legacy.auth,
+      loginToEmail(login),
+      toLegacyFirebasePassword(login, password)
+    );
+    const snap = await getDoc(doc(legacy.db, 'accounts', cred.user.uid)).catch(() => null);
+    legacyProfile = snap?.exists() ? (snap.data().profile as UserProfile) : null;
+    await signOut(legacy.auth).catch(() => {});
+  } catch (err) {
+    const code = errorCode(err);
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/invalid-login-credentials' || code === 'auth/user-not-found') {
+      throw invalidCredentials();
+    }
+    throw err;
+  }
+  if (!legacyProfile) throw invalidCredentials();
+  const passwordHash = hashAccountPassword(password, legacyProfile.id);
+  const migrated: UserProfile = { ...legacyProfile, login, passwordHash };
+  const res = await ensureAccount(migrated);
+  return { uid: res.uid, profile: res.cloudProfile ?? legacyProfile, profileId: legacyProfile.id, passwordHash };
 }
 
 export async function pushAccountProfile(profile: UserProfile): Promise<void> {
@@ -240,10 +345,10 @@ export function subscribeAccountProfile(
   );
 }
 
-export async function changeAccountPassword(login: string, newPassword: string): Promise<void> {
+export async function changeAccountPassword(login: string, newPasswordHash: string): Promise<void> {
   const { auth } = getHandle(login);
   if (!auth.currentUser) return;
-  await updatePassword(auth.currentUser, toFirebasePassword(login, newPassword));
+  await updatePassword(auth.currentUser, secretFromHash(newPasswordHash));
 }
 
 export async function signOutAccount(login: string): Promise<void> {
@@ -319,6 +424,42 @@ export async function joinCircleByCode(login: string, rawCode: string): Promise<
     share: true,
     owner: data.ownerUid === uid,
   };
+}
+
+/**
+ * Przeniesienie grupy do nowej bazy: pierwsza osoba odtwarza ją z tym samym kodem
+ * (i zostaje właścicielem), kolejne po prostu do niej dołączają.
+ */
+export async function ensureCircleMembership(login: string, circle: CircleMembership): Promise<CircleMembership | null> {
+  const { uid, db } = requireAccount(login);
+  const code = circle.code;
+  if (!code || !/^[A-Z0-9-]{4,16}$/.test(code) || !/^[a-zA-Z0-9_-]{1,128}$/.test(circle.id)) return null;
+  const memberRef = doc(db, 'circles', circle.id, 'members', uid);
+  const already = await getDoc(memberRef).catch(() => null);
+  if (already?.exists()) return null;
+  const codeSnap = await getDoc(doc(db, 'circleCodes', code));
+  if (codeSnap.exists()) {
+    if (String(codeSnap.data().circleId) !== circle.id) return null;
+    await setDoc(memberRef, { uid, joinCode: code, joinedAt: serverTimestamp() });
+    return null;
+  }
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'circles', circle.id), {
+    name: circle.name.trim().slice(0, 40) || 'Grupa',
+    ownerUid: uid,
+    joinCode: code,
+    createdAt: serverTimestamp(),
+  });
+  batch.set(doc(db, 'circleCodes', code), { circleId: circle.id, createdAt: serverTimestamp() });
+  batch.set(memberRef, { uid, joinCode: code, joinedAt: serverTimestamp() });
+  try {
+    await batch.commit();
+    return { ...circle, owner: true };
+  } catch {
+    // Ktoś odtworzył grupę w tej samej chwili — dołącz zwyczajnie.
+    await setDoc(memberRef, { uid, joinCode: code, joinedAt: serverTimestamp() }).catch(() => {});
+    return null;
+  }
 }
 
 export async function leaveCircle(login: string, circleId: string): Promise<void> {

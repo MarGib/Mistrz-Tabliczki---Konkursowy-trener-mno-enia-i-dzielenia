@@ -1,8 +1,8 @@
 rules_version = '2';
 
+// Reguły bazy projektu „mistrz-tabliczki” (plan Spark, bez opłat).
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Global default-deny safety net
     match /{document=**} {
       allow read, write: if false;
     }
@@ -19,297 +19,32 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
     function isValidId(id) {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function isValidOptionalProfileId(id) {
-      return id is string && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]*$');
     }
 
     function isValidJoinCodeId(code) {
       return code is string && code.size() >= 4 && code.size() <= 16 && code.matches('^[A-Z0-9\\-]+$');
     }
 
-    function isGroupMember(groupId) {
-      return isVerifiedUser() &&
-        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
-    }
-
-    function isGroupOwner(groupId) {
-      return isGroupMember(groupId) &&
-        get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
-    }
-
-    function isValidUserAccount(data, userId) {
-      return data.keys().hasAll(['uid', 'displayName', 'groupId', 'activeProfileId', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['uid', 'displayName', 'groupId', 'activeProfileId', 'createdAt', 'updatedAt']) &&
-        data.uid is string && data.uid == userId && data.uid == request.auth.uid && isValidId(data.uid) &&
-        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
-        data.groupId is string && isValidId(data.groupId) &&
-        isValidOptionalProfileId(data.activeProfileId) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
-    }
-
-    function isValidGroupWorkspace(data) {
-      return data.keys().hasAll(['ownerUid', 'joinCode', 'profileIds', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['ownerUid', 'joinCode', 'profileIds', 'createdAt', 'updatedAt']) &&
-        data.ownerUid is string && isValidId(data.ownerUid) &&
-        data.joinCode is string && isValidJoinCodeId(data.joinCode) &&
-        data.profileIds is list && data.profileIds.size() <= 50 &&
-        (data.profileIds.size() == 0 || data.profileIds[0] is string) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
-    }
-
-    function isValidGroupMember(data, groupId, memberUid) {
-      return data.keys().hasAll(['uid', 'groupId', 'role', 'joinedAt']) &&
-        data.keys().hasOnly(['uid', 'groupId', 'role', 'joinedAt']) &&
-        data.uid is string && data.uid == memberUid && isValidId(data.uid) &&
-        data.groupId is string && data.groupId == groupId && isValidId(data.groupId) &&
-        data.role is string && data.role in ['owner', 'member'] &&
-        data.joinedAt is timestamp;
-    }
-
-    function isValidJoinCode(data, code) {
-      return data.keys().hasAll(['code', 'groupId', 'ownerUid', 'createdAt']) &&
-        data.keys().hasOnly(['code', 'groupId', 'ownerUid', 'createdAt']) &&
-        data.code is string && data.code == code && isValidJoinCodeId(data.code) &&
-        data.groupId is string && isValidId(data.groupId) &&
-        data.ownerUid is string && isValidId(data.ownerUid) &&
-        data.createdAt is timestamp;
-    }
-
-    function isValidUserProfileDoc(data, groupId, profileId) {
-      return data.keys().hasAll([
-          'id', 'groupId', 'name', 'avatarId', 'xp', 'streakDays', 'lastActiveDate',
-          'unlockedStageIds', 'completedStageIds', 'earnedBadges', 'memories',
-          'sessions', 'tournamentBests', 'settings', 'activeThemeId', 'customThemes',
-          'updatedByUid', 'updatedAt'
-        ]) &&
-        data.keys().hasOnly([
-          'id', 'groupId', 'ownerUid', 'name', 'schoolName', 'className', 'login', 'passwordHash',
-          'avatarId', 'customAvatarSpec', 'xp', 'streakDays', 'lastActiveDate',
-          'unlockedStageIds', 'completedStageIds', 'earnedBadges', 'memories',
-          'sessions', 'tournamentBests', 'settings', 'activeThemeId', 'customThemes',
-          'updatedByUid', 'updatedAt'
-        ]) &&
-        data.id is string && data.id == profileId && isValidId(data.id) && data.id.size() <= 64 &&
-        data.groupId is string && data.groupId == groupId && isValidId(data.groupId) &&
-        (!('ownerUid' in data) || isValidId(data.ownerUid)) &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 32 &&
-        (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 64)) &&
-        (!('className' in data) || (data.className is string && data.className.size() <= 24)) &&
-        (!('login' in data) || (data.login is string && data.login.size() >= 1 && data.login.size() <= 32)) &&
-        (!('passwordHash' in data) || (data.passwordHash is string && data.passwordHash.size() <= 64)) &&
-        data.avatarId is string && data.avatarId.size() >= 1 && data.avatarId.size() <= 32 &&
-        (!('customAvatarSpec' in data) || data.customAvatarSpec is map) &&
-        data.xp is number && data.xp >= 0 && data.xp <= 10000000 &&
-        data.streakDays is number && data.streakDays >= 0 && data.streakDays <= 36500 &&
-        data.lastActiveDate is string && data.lastActiveDate.size() <= 16 &&
-        data.unlockedStageIds is list && data.unlockedStageIds.size() <= 20 &&
-        (data.unlockedStageIds.size() == 0 || data.unlockedStageIds[0] is string) &&
-        data.completedStageIds is list && data.completedStageIds.size() <= 20 &&
-        (data.completedStageIds.size() == 0 || data.completedStageIds[0] is string) &&
-        data.earnedBadges is list && data.earnedBadges.size() <= 30 &&
-        (data.earnedBadges.size() == 0 || data.earnedBadges[0] is string) &&
-        data.memories is map &&
-        data.sessions is list && data.sessions.size() <= 40 &&
-        (data.sessions.size() == 0 || data.sessions[0] is map) &&
-        data.tournamentBests is map &&
-        data.settings is map &&
-        data.activeThemeId is string && data.activeThemeId.size() >= 1 && data.activeThemeId.size() <= 64 &&
-        data.customThemes is list && data.customThemes.size() <= 20 &&
-        (data.customThemes.size() == 0 || data.customThemes[0] is map) &&
-        data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid) &&
-        data.updatedAt is timestamp;
-    }
-
-    function isValidFeed(data, groupId) {
-      return data.keys().hasAll(['groupId', 'items', 'updatedByUid', 'updatedAt']) &&
-        data.keys().hasOnly(['groupId', 'items', 'updatedByUid', 'updatedAt']) &&
-        data.groupId is string && data.groupId == groupId && isValidId(data.groupId) &&
-        data.items is list && data.items.size() <= 40 &&
-        (data.items.size() == 0 || data.items[0] is map) &&
-        data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid) &&
-        data.updatedAt is timestamp;
-    }
-
-    function isValidSchoolDirectory(data) {
-      return data.keys().hasAll(['schools', 'updatedAt']) &&
-        data.keys().hasOnly(['schools', 'updatedAt']) &&
-        data.schools is list && data.schools.size() <= 100 &&
-        (data.schools.size() == 0 || (
-          data.schools[0] is map &&
-          data.schools[0].keys().hasAll(['id', 'name', 'classes']) &&
-          data.schools[0].keys().hasOnly(['id', 'name', 'classes']) &&
-          data.schools[0].id is string && isValidId(data.schools[0].id) &&
-          data.schools[0].name is string && data.schools[0].name.size() >= 1 && data.schools[0].name.size() <= 64 &&
-          data.schools[0].classes is list && data.schools[0].classes.size() <= 40
-        )) &&
-        data.updatedAt is timestamp;
-    }
-
-    function isValidArenaPlayer(p) {
-      return p is map &&
-        p.keys().hasAll(['profileId', 'name', 'avatarId', 'xp', 'streakDays', 'solvedTasks', 'accuracyPct', 'sessionsCount', 'tournamentBests', 'updatedAtMs']) &&
-        p.keys().hasOnly(['profileId', 'name', 'schoolName', 'className', 'avatarId', 'customAvatarSpec', 'xp', 'streakDays', 'solvedTasks', 'accuracyPct', 'avgTimeSec', 'sessionsCount', 'tournamentBests', 'updatedAtMs']) &&
-        p.profileId is string && isValidId(p.profileId) && p.profileId.size() <= 64 &&
-        p.name is string && p.name.size() >= 1 && p.name.size() <= 32 &&
-        (!('schoolName' in p) || (p.schoolName is string && p.schoolName.size() <= 64)) &&
-        (!('className' in p) || (p.className is string && p.className.size() <= 24)) &&
-        p.avatarId is string && p.avatarId.size() >= 1 && p.avatarId.size() <= 32 &&
-        (!('customAvatarSpec' in p) || p.customAvatarSpec is map) &&
-        p.xp is number && p.xp >= 0 && p.xp <= 10000000 &&
-        p.streakDays is number && p.streakDays >= 0 && p.streakDays <= 36500 &&
-        p.solvedTasks is number && p.solvedTasks >= 0 && p.solvedTasks <= 1000000 &&
-        p.accuracyPct is number && p.accuracyPct >= 0 && p.accuracyPct <= 100 &&
-        (!('avgTimeSec' in p) || (p.avgTimeSec is number && p.avgTimeSec >= 0 && p.avgTimeSec <= 300)) &&
-        p.sessionsCount is number && p.sessionsCount >= 0 && p.sessionsCount <= 100000 &&
-        p.tournamentBests is map &&
-        p.updatedAtMs is number && p.updatedAtMs >= 0;
-    }
-
-    function isValidArenaBoard(data, boardId) {
-      return data.keys().hasAll(['id', 'players', 'updatedByUid', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'players', 'updatedByUid', 'updatedAt']) &&
-        data.id is string && data.id == boardId && isValidId(data.id) &&
-        data.players is list && data.players.size() <= 100 &&
-        (data.players.size() == 0 || isValidArenaPlayer(data.players[0])) &&
-        data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid) &&
-        data.updatedAt is timestamp;
-    }
-
-    // 1. Private user pointers
-    match /users/{userId} {
-      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+    // 5. Login → identyfikator profilu (potrzebny, by na nowym urządzeniu sprawdzić hasło).
+    match /logins/{login} {
+      allow get: if login.size() <= 40;
       allow list: if false;
-      allow create: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId &&
-        isValidUserAccount(incoming(), userId) &&
-        incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
-      allow update: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId &&
-        isValidUserAccount(incoming(), userId) &&
-        incoming().uid == existing().uid &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'groupId', 'activeProfileId', 'updatedAt']);
+      allow create: if isSignedIn() && login.size() >= 1 && login.size() <= 40 &&
+        incoming().keys().hasAll(['uid', 'profileId', 'createdAt']) &&
+        incoming().keys().hasOnly(['uid', 'profileId', 'createdAt']) &&
+        incoming().uid == request.auth.uid &&
+        incoming().profileId is string && incoming().profileId.size() >= 1 && incoming().profileId.size() <= 64 &&
+        incoming().createdAt == request.time;
+      allow update: if isSignedIn() && existing().uid == request.auth.uid &&
+        incoming().keys().hasOnly(['uid', 'profileId', 'createdAt']) &&
+        incoming().uid == request.auth.uid &&
+        incoming().profileId is string && incoming().profileId.size() >= 1 && incoming().profileId.size() <= 64 &&
+        incoming().createdAt == request.time;
       allow delete: if false;
     }
 
-    // 2. Competition group workspaces & subcollections
-    match /groups/{groupId} {
-      allow get: if isValidId(groupId) && isGroupMember(groupId);
-      allow list: if false;
-      allow create: if isVerifiedUser() && isValidId(groupId) &&
-        isValidGroupWorkspace(incoming()) &&
-        incoming().ownerUid == request.auth.uid &&
-        incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time &&
-        existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
-      allow update: if isValidId(groupId) && isGroupMember(groupId) &&
-        isValidGroupWorkspace(incoming()) &&
-        incoming().ownerUid == existing().ownerUid &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time &&
-        (
-          (isGroupOwner(groupId) && incoming().diff(existing()).affectedKeys().hasOnly(['joinCode', 'profileIds', 'updatedAt'])) ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['profileIds', 'updatedAt'])
-        );
-      allow delete: if false;
-
-      match /members/{memberUid} {
-        allow get: if isVerifiedUser() && isValidId(groupId) && isValidId(memberUid) &&
-          (request.auth.uid == memberUid || isGroupMember(groupId));
-        allow list: if false;
-        allow create: if isVerifiedUser() && isValidId(groupId) && isValidId(memberUid) &&
-          request.auth.uid == memberUid &&
-          isValidGroupMember(incoming(), groupId, memberUid) &&
-          incoming().joinedAt == request.time &&
-          (
-            (incoming().role == 'owner' &&
-              getAfter(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid) ||
-            (incoming().role == 'member' &&
-              exists(/databases/$(database)/documents/groups/$(groupId)))
-          );
-        allow update: if false;
-        allow delete: if isVerifiedUser() && isValidId(groupId) && isValidId(memberUid) &&
-          request.auth.uid == memberUid;
-      }
-
-      match /profiles/{profileId} {
-        allow get: if isValidId(groupId) && isValidId(profileId) && isGroupMember(groupId);
-        allow list: if false;
-        allow create: if isValidId(groupId) && isValidId(profileId) && isGroupMember(groupId) &&
-          isValidUserProfileDoc(incoming(), groupId, profileId) &&
-          incoming().updatedAt == request.time;
-        allow update: if isValidId(groupId) && isValidId(profileId) && isGroupMember(groupId) &&
-          isValidUserProfileDoc(incoming(), groupId, profileId) &&
-          incoming().id == existing().id &&
-          incoming().groupId == existing().groupId &&
-          incoming().updatedAt == request.time &&
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'ownerUid', 'name', 'schoolName', 'className', 'login', 'passwordHash', 'avatarId', 'customAvatarSpec',
-            'xp', 'streakDays', 'lastActiveDate', 'unlockedStageIds', 'completedStageIds',
-            'earnedBadges', 'memories', 'sessions', 'tournamentBests', 'settings',
-            'activeThemeId', 'customThemes', 'updatedByUid', 'updatedAt'
-          ]);
-        allow delete: if isValidId(groupId) && isValidId(profileId) && isGroupMember(groupId);
-      }
-
-      match /feed/{feedId} {
-        allow get: if isValidId(groupId) && isValidId(feedId) && isGroupMember(groupId);
-        allow list: if false;
-        allow create: if isValidId(groupId) && isValidId(feedId) && isGroupMember(groupId) &&
-          isValidFeed(incoming(), groupId) &&
-          incoming().updatedAt == request.time;
-        allow update: if isValidId(groupId) && isValidId(feedId) && isGroupMember(groupId) &&
-          isValidFeed(incoming(), groupId) &&
-          incoming().groupId == existing().groupId &&
-          incoming().updatedAt == request.time &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['items', 'updatedByUid', 'updatedAt']);
-        allow delete: if false;
-      }
-    }
-
-    // 3. Group/class join codes (exact lookup only, no enumeration)
-    match /joinCodes/{code} {
-      allow get: if isVerifiedUser() && isValidJoinCodeId(code);
-      allow list: if false;
-      allow create: if isVerifiedUser() && isValidJoinCodeId(code) &&
-        isValidJoinCode(incoming(), code) &&
-        incoming().ownerUid == request.auth.uid &&
-        incoming().createdAt == request.time &&
-        existsAfter(/databases/$(database)/documents/groups/$(incoming().groupId));
-      allow update: if false;
-      allow delete: if isVerifiedUser() && isValidJoinCodeId(code) &&
-        existing().ownerUid == request.auth.uid;
-    }
-
-    // 4. Non-PII global school & class directory (single fixed document 'global')
-    match /schoolDirectory/{directoryId} {
-      allow get: if directoryId == 'global';
-      allow list: if false;
-      allow create, update: if isVerifiedUser() && directoryId == 'global' &&
-        isValidSchoolDirectory(incoming()) &&
-        incoming().updatedAt == request.time;
-      allow delete: if false;
-    }
-
-    // 5. Non-PII global and per-school competition scoreboards (no PII, exact board lookup only)
-    match /arenaBoards/{boardId} {
-      allow get: if isValidId(boardId) && (boardId == 'global' || isVerifiedUser());
-      allow list: if false;
-      allow create, update: if isVerifiedUser() && isValidId(boardId) &&
-        isValidArenaBoard(incoming(), boardId) &&
-        incoming().updatedAt == request.time;
-      allow delete: if false;
-    }
       // 6. Konta login + hasło: pełny profil gracza, widoczny tylko dla właściciela.
     match /accounts/{uid} {
       allow get: if isSignedIn() && request.auth.uid == uid;
