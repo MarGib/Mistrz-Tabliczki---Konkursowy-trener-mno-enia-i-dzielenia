@@ -8,6 +8,7 @@ import { computeResponseQuality } from '../engine/spacedRepetition';
 import { playTone } from '../utils/sound';
 import type { ActiveSeriesConfig, FactMemory, MathProblem, SessionRecord, TaskAttempt } from '../types/math';
 import { GameResult } from './GameResult';
+import { GAME_LIMITS, attachIntegrity, createIntegritySensor } from '../engine/integrity';
 
 interface Props {
   config: ActiveSeriesConfig;
@@ -39,6 +40,13 @@ export function PairsGame({ config, memories, soundEnabled, onCompleteSession, o
   const [left, setLeft] = useState<number | null>(config.timeLimitSec ?? null);
   const startRef = useRef(Date.now());
   const lastRef = useRef(Date.now());
+  const sensorRef = useRef<ReturnType<typeof createIntegritySensor> | null>(null);
+  if (!sensorRef.current) sensorRef.current = createIntegritySensor();
+  useEffect(() => {
+    const sensor = sensorRef.current!;
+    sensor.start();
+    return () => sensor.stop();
+  }, []);
   const stateRef = useRef({ attempts, matched });
   stateRef.current = { attempts, matched };
 
@@ -56,6 +64,8 @@ export function PairsGame({ config, memories, soundEnabled, onCompleteSession, o
         .map<TaskAttempt>((p) => ({ problem: p, userAnswer: -1, isCorrect: false, timeMs: 5000, usedHint: false, pointsEarned: 0, quality: 1 }));
       const all = [...atts, ...missing];
       const s = makeSession(config, all);
+      // Ocena tylko dopasowanych par (brakujące z końca czasu to nie odpowiedzi).
+      attachIntegrity(s, atts, sensorRef.current!.signals(), GAME_LIMITS.pairs);
       setSession(s);
       onCompleteSession(s, all);
       playTone('finish', soundEnabled);
@@ -81,7 +91,8 @@ export function PairsGame({ config, memories, soundEnabled, onCompleteSession, o
     if (!selected || session) return;
     const p = problems.find((x) => x.id === selected)!;
     if (p.answer === value) {
-      const timeMs = Math.max(400, Date.now() - lastRef.current);
+      const rawMs = Date.now() - lastRef.current;
+      const timeMs = Math.max(400, rawMs);
       lastRef.current = Date.now();
       const firstTry = !errored.has(p.id);
       const att: TaskAttempt = {
@@ -93,6 +104,7 @@ export function PairsGame({ config, memories, soundEnabled, onCompleteSession, o
         pointsEarned: firstTry ? 8 : 2,
         quality: computeResponseQuality(firstTry, timeMs, false),
       };
+      sensorRef.current?.answer(rawMs, firstTry);
       const nextAtt = [...attempts, att];
       const nextMatched = new Set(matched).add(p.id);
       setAttempts(nextAtt);
@@ -120,6 +132,7 @@ export function PairsGame({ config, memories, soundEnabled, onCompleteSession, o
           onContinue={onContinue}
           onAgain={() => {
             memoriesRef.current = memories;
+            sensorRef.current?.reset();
             setRound((r) => r + 1);
             setMatched(new Set());
             setErrored(new Set());

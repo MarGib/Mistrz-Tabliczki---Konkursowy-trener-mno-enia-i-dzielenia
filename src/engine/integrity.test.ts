@@ -67,3 +67,18 @@ test('skan serwera, limit kont na urządzeniu i blokada zgadywania haseł', () =
   assert.ok(lockoutLeftMs(fails, now) > 4 * 60_000);
   assert.equal(lockoutLeftMs(fails.slice(0, 4), now), 0);
 });
+
+test('gry dotykowe mają własne progi', async () => {
+  const { GAME_LIMITS } = await import('./integrity');
+  // szybkie, ale ludzkie stukanie w Prawda/fałsz (ok. 0,5 s) — w porządku
+  const human = Array.from({ length: 20 }, (_, i) => 450 + (i % 5) * 90);
+  assert.equal(assessSeries(attempts(human), sig(human), GAME_LIMITS.truefalse).level, 'ok');
+  // 0,15 s na decyzję przez 20 zadań — nie człowiek
+  const bot = Array.from({ length: 20 }, (_, i) => 120 + (i % 3) * 30);
+  assert.equal(assessSeries(attempts(bot), sig(bot), GAME_LIMITS.truefalse).level, 'pending');
+  // Pary: 6 par po 0,2 s
+  const pairsBot = [180, 220, 200, 190, 210, 230];
+  assert.equal(assessSeries(attempts(pairsBot), sig(pairsBot), GAME_LIMITS.pairs).level, 'pending');
+  const pairsKid = [1400, 900, 2100, 1200, 800, 1700];
+  assert.equal(assessSeries(attempts(pairsKid), sig(pairsKid), GAME_LIMITS.pairs).level, 'ok');
+});

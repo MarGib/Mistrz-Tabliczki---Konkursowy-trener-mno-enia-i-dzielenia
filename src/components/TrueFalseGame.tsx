@@ -2,6 +2,7 @@ import { ArrowLeft, Check, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { setGameActive } from '../autoUpdate';
 import { nearMiss } from '../engine/games';
+import { GAME_LIMITS, attachIntegrity, createIntegritySensor } from '../engine/integrity';
 import { lessonStars } from '../engine/path';
 import { buildSeriesProblems, makeSession } from '../engine/seriesRules';
 import { computeResponseQuality } from '../engine/spacedRepetition';
@@ -37,6 +38,14 @@ export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSessio
   const taskRef = useRef(Date.now());
   const attemptsRef = useRef<TaskAttempt[]>([]);
   attemptsRef.current = attempts;
+  // Uczciwa gra: liczniki zdarzeń ze skryptu i chowania aplikacji (bez treści).
+  const sensorRef = useRef<ReturnType<typeof createIntegritySensor> | null>(null);
+  if (!sensorRef.current) sensorRef.current = createIntegritySensor();
+  useEffect(() => {
+    const sensor = sensorRef.current!;
+    sensor.start();
+    return () => sensor.stop();
+  }, []);
 
   useEffect(() => {
     setGameActive(!session);
@@ -46,6 +55,7 @@ export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSessio
   const finish = useCallback(() => {
     if (session) return;
     const s = makeSession(config, attemptsRef.current);
+    attachIntegrity(s, attemptsRef.current, sensorRef.current!.signals(), GAME_LIMITS.truefalse);
     setSession(s);
     if (attemptsRef.current.length > 0) onCompleteSession(s, attemptsRef.current);
     playTone('finish', soundEnabled);
@@ -71,7 +81,8 @@ export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSessio
       const p = problems[idx];
       const isTrue = shown[idx] === p.answer;
       const correct = saysTrue === isTrue;
-      const timeMs = Math.max(250, Date.now() - taskRef.current);
+      const rawMs = Date.now() - taskRef.current;
+      const timeMs = Math.max(250, rawMs);
       const att: TaskAttempt = {
         problem: p,
         userAnswer: shown[idx],
@@ -81,6 +92,7 @@ export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSessio
         pointsEarned: correct ? 5 : 0,
         quality: computeResponseQuality(correct, timeMs, false),
       };
+      sensorRef.current?.answer(rawMs, correct);
       setAttempts((a) => [...a, att]);
       setFlash(correct ? 'ok' : 'bad');
       playTone(correct ? 'correct' : 'wrong', soundEnabled, 1);
@@ -119,6 +131,7 @@ export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSessio
           onContinue={onContinue}
           onAgain={() => {
             memoriesRef.current = memories;
+            sensorRef.current?.reset();
             setRound((r) => r + 1);
             setIdx(0);
             setAttempts([]);

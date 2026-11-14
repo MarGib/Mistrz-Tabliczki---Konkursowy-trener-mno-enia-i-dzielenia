@@ -70,8 +70,21 @@ export const LIMITS = {
   hiddenCorrect: 3,
 };
 
+/** Progi dla gier dotykowych (jedno lub dwa stuknięcia zamiast wpisywania wyniku). */
+export const GAME_LIMITS: Record<'truefalse' | 'pairs', Partial<typeof LIMITS>> = {
+  // Prawda/fałsz: przeczytać działanie i stuknąć jeden z dwóch przycisków.
+  truefalse: { minTasks: 12, superhumanMedianMs: 250, veryFastMedianMs: 380 },
+  // Pary: dwa stuknięcia (działanie + wynik) i szukanie wyniku na planszy.
+  pairs: { minTasks: 6, superhumanMedianMs: 300, veryFastMedianMs: 450 },
+};
+
 /** Ocena jednej serii. */
-export function assessSeries(attempts: TaskAttempt[], signals: IntegritySignals): IntegrityVerdict {
+export function assessSeries(
+  attempts: TaskAttempt[],
+  signals: IntegritySignals,
+  overrides: Partial<typeof LIMITS> = {}
+): IntegrityVerdict {
+  const L = { ...LIMITS, ...overrides };
   const reasons: string[] = [];
   const times = signals.rawTimesMs.length === attempts.length ? signals.rawTimesMs : attempts.map((a) => a.timeMs);
   const med = median(times);
@@ -83,18 +96,18 @@ export function assessSeries(attempts: TaskAttempt[], signals: IntegritySignals)
     reasons.push('automation');
     strong = true;
   }
-  if (n >= LIMITS.minTasks && accuracy >= 0.9) {
-    if (med < LIMITS.superhumanMedianMs) {
+  if (n >= L.minTasks && accuracy >= 0.9) {
+    if (med < L.superhumanMedianMs) {
       reasons.push('superhuman');
       strong = true;
-    } else if (med < LIMITS.veryFastMedianMs) {
+    } else if (med < L.veryFastMedianMs) {
       reasons.push('very-fast');
     }
-    if (variation(times) < LIMITS.robotVariation && med < LIMITS.robotMaxMedianMs) {
+    if (variation(times) < L.robotVariation && med < L.robotMaxMedianMs) {
       reasons.push('robot-rhythm');
     }
   }
-  if (signals.correctAfterHidden >= LIMITS.hiddenCorrect) {
+  if (signals.correctAfterHidden >= L.hiddenCorrect) {
     reasons.push('window-switch');
   }
   // Dwa słabe sygnały naraz to już mocny sygnał.
@@ -185,6 +198,17 @@ export function clearLoginFailures(): void {
 }
 
 /* ---------------- Czujnik w trakcie gry ---------------- */
+
+/** Dopisuje wynik czujnika do serii, gdy wyglądała nienaturalnie. */
+export function attachIntegrity(
+  session: { integrity?: { level: 'watch' | 'pending'; reasons: string[]; medianMs: number } },
+  attempts: TaskAttempt[],
+  signals: IntegritySignals,
+  overrides: Partial<typeof LIMITS> = {}
+): void {
+  const v = assessSeries(attempts, signals, overrides);
+  if (v.level !== 'ok') session.integrity = { level: v.level, reasons: v.reasons, medianMs: v.medianMs };
+}
 
 /**
  * Nasłuchuje zdarzeń w trakcie serii: zdarzenia wygenerowane skryptem i chowanie aplikacji.
