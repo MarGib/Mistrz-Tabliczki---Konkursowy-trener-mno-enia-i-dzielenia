@@ -114,8 +114,17 @@ export function GroupsPanel({
     }
   };
 
+  const COLLAPSE_AFTER = 5;
+  const [showAll, setShowAll] = useState(false);
+  let visibleCircles = circles;
+  if (!showAll && circles.length > COLLAPSE_AFTER) {
+    visibleCircles = circles.slice(0, COLLAPSE_AFTER - 1);
+    if (selected && !visibleCircles.some((c) => c.id === selected.id)) visibleCircles = [...visibleCircles, selected];
+  }
+  const hiddenCount = circles.length - visibleCircles.length;
+
   const chip = (active: boolean) =>
-    `shrink-0 min-h-[40px] px-3.5 rounded-xl border text-sm font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+    `max-w-full min-h-[38px] px-3.5 rounded-xl border text-sm font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
       active
         ? 'bg-[var(--th-primary)] border-[var(--th-primary)] text-[var(--th-primary-fg)]'
         : 'bg-[var(--th-surface)] border-[var(--th-border)] text-[var(--th-text)] hover:border-[var(--th-primary)]'
@@ -128,31 +137,69 @@ export function GroupsPanel({
       data-testid="groups-panel"
     >
       <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-3 sm:p-4 shadow-sm space-y-3">
-        <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-          <HelpButton section="groups" label="Grupy" />
-          <button type="button" className={chip(!selectedCircleId)} onClick={() => onSelectCircle(null)}>
-            Moje konta
-          </button>
-          {circles.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={chip(c.id === selectedCircleId)}
-              onClick={() => onSelectCircle(c.id)}
-            >
-              {c.name}
-              {!c.share && <EyeOff className="w-3.5 h-3.5 opacity-80" aria-label="wyniki ukryte" />}
-            </button>
-          ))}
+        {/* Nagłówek: tytuł + pomoc po lewej, zarządzanie po prawej — nic nie jest ucinane na telefonie. */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Users className="w-4 h-4 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
+            <span className="text-sm font-bold text-[var(--th-text)] truncate">
+              {circles.length > 1 ? `Twoje grupy (${circles.length})` : 'Ranking'}
+            </span>
+            <HelpButton section="groups" label="Grupy" />
+          </div>
           <button
             type="button"
             onClick={() => setManageOpen((v) => !v)}
             aria-expanded={manageOpen}
-            className="shrink-0 min-h-[40px] px-3 rounded-xl border border-dashed border-[var(--th-border)] text-sm font-bold text-[var(--th-text-muted)] hover:text-[var(--th-text)] inline-flex items-center gap-1.5 cursor-pointer"
+            className="shrink-0 min-h-[36px] px-3 rounded-xl border border-dashed border-[var(--th-border)] text-xs sm:text-sm font-bold text-[var(--th-text-muted)] hover:text-[var(--th-text)] hover:border-[var(--th-primary)] inline-flex items-center gap-1.5 cursor-pointer"
           >
             {circles.length > 0 ? <Settings2 className="w-4 h-4" aria-hidden="true" /> : <Plus className="w-4 h-4" aria-hidden="true" />}
-            <span>{circles.length > 0 ? 'Grupy' : 'Dodaj grupę'}</span>
+            <span>{circles.length > 0 ? 'Zarządzaj' : 'Dodaj grupę'}</span>
           </button>
+        </div>
+
+        {/* Wybór rankingu: przyciski zawijają się w kolejne wiersze; przy wielu grupach część jest zwinięta. */}
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Wybierz ranking">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!selectedCircleId}
+            className={chip(!selectedCircleId)}
+            onClick={() => onSelectCircle(null)}
+          >
+            Moje konta
+          </button>
+          {visibleCircles.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={c.id === selectedCircleId}
+              className={chip(c.id === selectedCircleId)}
+              onClick={() => onSelectCircle(c.id)}
+              title={c.name}
+            >
+              <span className="truncate max-w-[11rem]">{c.name}</span>
+              {!c.share && <EyeOff className="w-3.5 h-3.5 opacity-80 shrink-0" aria-label="wyniki ukryte" />}
+            </button>
+          ))}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="min-h-[38px] px-3 rounded-xl border border-[var(--th-border)] text-sm font-bold text-[var(--th-primary)] cursor-pointer"
+            >
+              +{hiddenCount} więcej
+            </button>
+          )}
+          {showAll && circles.length > COLLAPSE_AFTER && (
+            <button
+              type="button"
+              onClick={() => setShowAll(false)}
+              className="min-h-[38px] px-3 rounded-xl text-sm font-bold text-[var(--th-text-muted)] cursor-pointer"
+            >
+              Zwiń
+            </button>
+          )}
         </div>
 
         {justCreated && (
@@ -203,7 +250,13 @@ export function GroupsPanel({
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
             <span className="text-[var(--th-text-muted)] inline-flex items-center gap-1.5">
               <Users className="w-4 h-4" aria-hidden="true" />
-              {membersCount} {membersCount === 1 ? 'osoba' : membersCount < 5 ? 'osoby' : 'osób'} widocznych w rankingu
+              {membersCount}{' '}
+              {membersCount === 1
+                ? 'osoba widoczna'
+                : [2, 3, 4].includes(membersCount % 10) && ![12, 13, 14].includes(membersCount % 100)
+                ? 'osoby widoczne'
+                : 'osób widocznych'}{' '}
+              w rankingu
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="text-[var(--th-text-muted)]">Kod:</span>
