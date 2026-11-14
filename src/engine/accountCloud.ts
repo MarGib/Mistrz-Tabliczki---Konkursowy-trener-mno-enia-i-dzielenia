@@ -329,14 +329,14 @@ export async function publishCircleCards(profile: UserProfile): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid) return;
   const card = profileToArenaPlayerCard(profile);
-  const payload = stripUndefinedDeep({
-    ...card,
-    uid,
-    profileId: sanitizeFirestoreId(profile.id),
-    schoolName: undefined,
-    className: undefined,
+  const { schoolName: _s, className: _c, ...rest } = card;
+  void _s;
+  void _c;
+  // serverTimestamp() dokładamy PO czyszczeniu — inaczej znacznik zostałby zepsuty.
+  const payload = {
+    ...stripUndefinedDeep({ ...rest, uid, profileId: sanitizeFirestoreId(profile.id) }),
     updatedAt: serverTimestamp(),
-  });
+  };
   await Promise.all(
     circles.map((c) =>
       c.share

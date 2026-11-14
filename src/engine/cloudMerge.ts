@@ -298,6 +298,22 @@ export function mergeSingleProfile(
   local: UserProfile | undefined,
   cloud: UserProfile
 ): UserProfile {
+  const merged = mergeSingleProfileInner(local, cloud);
+  if (!local) return merged;
+  // Pola konta login+hasło żyją lokalnie — nie pozwól, by starsza kopia z chmury je skasowała.
+  return {
+    ...merged,
+    cloudUid: local.cloudUid ?? merged.cloudUid,
+    circles: local.circles ?? merged.circles,
+    login: local.login ?? merged.login,
+    passwordHash: local.passwordHash ?? merged.passwordHash,
+  };
+}
+
+function mergeSingleProfileInner(
+  local: UserProfile | undefined,
+  cloud: UserProfile
+): UserProfile {
   if (!local) return cloud;
 
   // If local is untouched (0 XP, 0 sessions, no custom password, no school/class set locally), adopt cloud verbatim

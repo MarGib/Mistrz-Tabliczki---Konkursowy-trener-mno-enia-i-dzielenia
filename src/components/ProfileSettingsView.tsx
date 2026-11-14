@@ -46,6 +46,7 @@ import { AvatarStudio } from './AvatarStudio';
 
 interface ProfileSettingsViewProps {
   accountState?: AccountSyncState;
+  onLogout: () => void;
   onCreateAccount: (
     name: string,
     avatarId: string,
@@ -119,6 +120,7 @@ export function ProfileSettingsView({
   onCreateProfile,
   accountState,
   onCreateAccount,
+  onLogout,
   onDeleteProfile,
   onUpdateProfileMeta,
   onSetProfileCredentials,
@@ -337,13 +339,28 @@ export function ProfileSettingsView({
                 {activeProfile.sessions.length} ukończonych serii
               </p>
             </div>
-            <AvatarDisplay
-              avatarId={activeProfile.avatarId}
-              customSpec={activeProfile.customAvatarSpec}
-              name={activeProfile.name}
-              sizeClass="w-14 h-14"
-            />
+            <div className="flex flex-col items-center gap-2 shrink-0">
+              <AvatarDisplay
+                avatarId={activeProfile.avatarId}
+                customSpec={activeProfile.customAvatarSpec}
+                name={activeProfile.name}
+                sizeClass="w-14 h-14"
+              />
+              <button
+                type="button"
+                onClick={onLogout}
+                data-testid="logout-btn"
+                className="min-h-[36px] px-3 rounded-xl border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] hover:border-red-400 hover:text-red-500 cursor-pointer"
+              >
+                Wyloguj
+              </button>
+            </div>
           </div>
+          {!activeProfile.cloudUid && (
+            <p className="text-[11px] text-[var(--th-text-muted)] -mt-2">
+              To konto nie jest jeszcze w chmurze — „Wyloguj” wróci do wyboru kont, a wyniki zostaną na tym urządzeniu.
+            </p>
+          )}
 
           {/* Edit Current User Name, School & Class */}
           <form onSubmit={handleSaveProfileDetails} className="space-y-3">

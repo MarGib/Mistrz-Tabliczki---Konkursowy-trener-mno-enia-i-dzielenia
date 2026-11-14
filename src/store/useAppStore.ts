@@ -56,6 +56,7 @@ import {
   pushAccountProfile,
   registerOrSignInAccount,
   signInAccountAndFetch,
+  signOutAccount,
   subscribeAccountProfile,
   subscribeCirclePlayers,
 } from '../engine/accountCloud';
@@ -1410,6 +1411,37 @@ export function useAppStore() {
     [linkAccount, mergeCloudIntoLocal, setSyncFor]
   );
 
+  /** Wyloguj konto z tego urządzenia. Konto w chmurze zostaje — można zalogować się ponownie. */
+  const logoutAccount = useCallback(
+    async (profileId: string) => {
+      const p = storeRef.current.profiles.find((x) => x.id === profileId);
+      if (!p) return;
+      if (p.cloudUid) {
+        // Wyślij ostatnie zmiany przed wylogowaniem.
+        await pushAccountProfile(p).catch(() => {});
+        await signOutAccount(profileLogin(p)).catch(() => {});
+      }
+      setStore((prev) => {
+        const remaining = p.cloudUid ? prev.profiles.filter((x) => x.id !== profileId) : prev.profiles;
+        const owned = prev.ownedProfileIds.filter((id) => id !== profileId);
+        return {
+          ...prev,
+          profiles: remaining,
+          ownedProfileIds: p.cloudUid ? owned : prev.ownedProfileIds,
+          activeProfileId: owned[0] ?? '',
+          hasSelectedProfile: false,
+        };
+      });
+      setAccountSync((prev) => {
+        const next = { ...prev };
+        delete next[profileId];
+        return next;
+      });
+      setSelectedCircleId(null);
+    },
+    []
+  );
+
   /* ============================== Grupy ============================== */
   const updateProfileCircles = useCallback(
     (profileId: string, updater: (list: CircleMembership[]) => CircleMembership[]) => {
@@ -1589,6 +1621,7 @@ export function useAppStore() {
     joinGroupCode,
     resetLocalData,
     accountSync,
+    logoutAccount,
     loginToCloudAccount,
     createAccountWithCloud,
     selectedCircleId: effectiveCircleId,

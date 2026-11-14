@@ -59,6 +59,7 @@ export default function App() {
     joinGroupCode,
     resetLocalData,
     accountSync,
+    logoutAccount,
     loginToCloudAccount,
     createAccountWithCloud,
     selectedCircleId,
@@ -292,6 +293,10 @@ export default function App() {
               <ProfileSettingsView
                 accountState={accountSync[activeProfile.id]}
                 onCreateAccount={createAccountWithCloud}
+                onLogout={() => {
+                  void logoutAccount(activeProfile.id);
+                  handleSelectTab('trening');
+                }}
                 ownedProfiles={ownedProfiles}
                 activeProfile={activeProfile}
                 schoolDirectory={schoolDirectory}
