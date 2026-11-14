@@ -2,6 +2,7 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import './pwa';
+import { startAutoUpdate } from './autoUpdate';
 import { HelpProvider } from './help/HelpContext';
 import { HelpShots } from './help/HelpShots';
 
@@ -17,3 +18,5 @@ if ('serviceWorker' in navigator && import.meta.env.PROD && !isShots) {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
   });
 }
+
+if (!isShots) startAutoUpdate();

@@ -173,7 +173,7 @@ export function describeAccountError(err: unknown): string {
   }
   const msg = err instanceof Error ? err.message : String(err ?? '');
   if (/nie odpowiada/i.test(msg)) {
-    return 'Baza chwilowo nie przyjmuje zapisów. Wyniki zostają na tym urządzeniu i wyślą się automatycznie.';
+    return 'Nie udało się połączyć z bazą. Sprawdź internet i spróbuj ponownie — wyniki zostają na tym urządzeniu.';
   }
   return msg || 'Nie udało się połączyć z bazą.';
 }

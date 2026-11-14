@@ -1,3 +1,4 @@
+import { reloadIfNewVersion } from '../autoUpdate';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -1514,6 +1515,7 @@ export function useAppStore() {
         window.setTimeout(() => void ensureCircles(cloud.id), 500);
         return { ok: true };
       } catch (err) {
+        void reloadIfNewVersion();
         return { ok: false, error: describeAccountError(err) };
       }
     },
