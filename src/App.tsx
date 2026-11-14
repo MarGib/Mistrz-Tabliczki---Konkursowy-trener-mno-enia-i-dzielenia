@@ -222,7 +222,7 @@ export default function App() {
             />
           )}
 
-          <main className={`flex-1 ${!activeSeries ? 'pb-20 md:pb-8' : 'pb-6'}`}>
+          <main className={`flex-1 ${!activeSeries ? 'pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-8' : 'pb-6'}`}>
             {!activeSeries && <InstallBanner />}
             {!activeSeries && (
               <InviteCard

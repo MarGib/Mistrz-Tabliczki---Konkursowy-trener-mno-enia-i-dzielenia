@@ -16,12 +16,16 @@ interface TopNavProps {
   device: DeviceProfile;
 }
 
-const NAV_ITEMS: { id: NavTab; label: string; icon: typeof Home }[] = [
-  { id: 'trening', label: 'Trening', icon: Home },
-  { id: 'turnieje', label: 'Turnieje', icon: Trophy },
-  { id: 'statystyki', label: 'Statystyki', icon: BarChart3 },
-  { id: 'szablony', label: 'Szablony', icon: Palette },
-  { id: 'konto', label: 'Konto', icon: User },
+/**
+ * Kolor zakładki na pasku telefonu: własny odcień (zielony, złoty, niebieski, różowy, fioletowy)
+ * zmieszany z kolorem przewodnim szablonu — ikonki są kolorowe, ale zawsze pasują do motywu.
+ */
+const NAV_ITEMS: { id: NavTab; label: string; icon: typeof Home; tint: string }[] = [
+  { id: 'trening', label: 'Trening', icon: Home, tint: 'var(--th-primary)' },
+  { id: 'turnieje', label: 'Turnieje', icon: Trophy, tint: 'color-mix(in oklab, #F59E0B 85%, var(--th-primary))' },
+  { id: 'statystyki', label: 'Statystyki', icon: BarChart3, tint: 'color-mix(in oklab, #3B82F6 85%, var(--th-primary))' },
+  { id: 'szablony', label: 'Szablony', icon: Palette, tint: 'color-mix(in oklab, #EC4899 85%, var(--th-primary))' },
+  { id: 'konto', label: 'Konto', icon: User, tint: 'color-mix(in oklab, #8B5CF6 85%, var(--th-primary))' },
 ];
 
 export function TopNav({
@@ -123,13 +127,17 @@ export function TopNav({
         </div>
       </header>
 
-      {/* Mobile Bottom Thumb-Zone Navigation (5 tabs) */}
+      {/* Mobile Bottom Thumb-Zone Navigation (5 tabs) — kolorowe kafelki dopasowane do szablonu */}
       <nav
         aria-label="Nawigacja mobilna"
-        style={{ backgroundColor: 'var(--th-surface)' }}
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--th-border)]"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--th-surface) 92%, transparent)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          boxShadow: '0 -6px 20px -12px color-mix(in srgb, var(--th-text) 35%, transparent)',
+        }}
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--th-border)] backdrop-blur-md"
       >
-        <div className="grid grid-cols-5 h-16">
+        <div className="grid grid-cols-5 h-16 px-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -139,14 +147,39 @@ export function TopNav({
                 type="button"
                 onClick={() => onSelectTab(item.id)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-colors cursor-pointer ${
-                  isActive
-                    ? 'text-[var(--th-primary)] font-bold'
-                    : 'text-[var(--th-text-muted)] hover:text-[var(--th-text)] font-medium'
-                }`}
+                className="group flex flex-col items-center justify-center gap-1 min-h-[44px] cursor-pointer focus-visible:outline-none"
               >
-                <Icon className="w-5 h-5" strokeWidth={isActive ? 2.4 : 2} aria-hidden="true" />
-                <span className="text-[10px] leading-none whitespace-nowrap">{item.label}</span>
+                <span
+                  aria-hidden="true"
+                  style={
+                    isActive
+                      ? {
+                          background: `linear-gradient(145deg, color-mix(in oklab, ${item.tint} 82%, white), ${item.tint} 55%, color-mix(in oklab, ${item.tint} 80%, black))`,
+                          color: '#FFFFFF',
+                          boxShadow: `0 4px 12px -3px color-mix(in srgb, ${item.tint} 70%, transparent), inset 0 1px 0 rgba(255,255,255,0.35)`,
+                        }
+                      : {
+                          background: `color-mix(in oklab, ${item.tint} 16%, var(--th-surface))`,
+                          color: item.tint,
+                          boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${item.tint} 22%, var(--th-surface))`,
+                        }
+                  }
+                  className={`flex items-center justify-center rounded-2xl transition-all duration-200 group-active:scale-90 group-focus-visible:ring-2 group-focus-visible:ring-offset-2 group-focus-visible:ring-[var(--th-primary)] ${
+                    isActive ? 'w-12 h-8 -translate-y-0.5' : 'w-10 h-8'
+                  }`}
+                >
+                  <Icon className="w-[19px] h-[19px]" strokeWidth={isActive ? 2.5 : 2.1} />
+                </span>
+                <span
+                  style={{
+                    color: isActive
+                      ? `color-mix(in oklab, ${item.tint} 75%, var(--th-text))`
+                      : 'var(--th-text-muted)',
+                  }}
+                  className={`text-[10px] leading-none whitespace-nowrap ${isActive ? 'font-extrabold' : 'font-semibold'}`}
+                >
+                  {item.label}
+                </span>
               </button>
             );
           })}
