@@ -128,3 +128,9 @@ test('Rekord osobisty: tempo i pierwsza seria bez błędu', () => {
   assert.equal(personalRecord([s(3000, 90)], s(3500, 100))?.kind, 'first-perfect');
   assert.equal(personalRecord([s(3000, 95), s(2800, 95)], s(1000, 95, 10, 500)), null, 'inny przedział');
 });
+
+import { fromMemoryCount } from './seriesInsight';
+test('Z pamięci: poprawne, bez podpowiedzi, poniżej 3 s', () => {
+  const a = (ok: boolean, ms: number, hint = false) => ({ isCorrect: ok, timeMs: ms, usedHint: hint });
+  assert.equal(fromMemoryCount([a(true, 1000), a(true, 2999), a(true, 3000), a(false, 500), a(true, 800, true)]), 2);
+});

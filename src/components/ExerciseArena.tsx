@@ -48,7 +48,7 @@ import { CelebrationBurst } from './CelebrationBurst';
 import { VictoryPosterCard } from './VictoryPosterCard';
 import { VisualHintCard } from './VisualHintCard';
 import { setGameActive } from '../autoUpdate';
-import { seriesInsight } from '../engine/seriesInsight';
+import { fromMemoryCount, seriesInsight } from '../engine/seriesInsight';
 import { personalRecord } from '../engine/records';
 
 interface ExerciseArenaProps {
@@ -618,6 +618,9 @@ export function ExerciseArena({
           {seriesInsight(attempts) && (
             <p className="relative z-10 -mt-2 mb-6 rounded-2xl bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] px-4 py-3 text-sm sm:text-base font-semibold text-[var(--th-text)]" data-testid="series-insight">
               💡 {seriesInsight(attempts)}
+              <span className="block mt-1 text-xs sm:text-sm font-medium text-[var(--th-text-muted)]">
+                Z pamięci (poniżej 3 s): <strong className="text-[var(--th-text)] tabular-nums">{fromMemoryCount(attempts)} z {attempts.length}</strong> — cel to wszystkie.
+              </span>
             </p>
           )}
 

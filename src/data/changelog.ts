@@ -25,6 +25,8 @@ export const RELEASES: ReleaseNote[] = [
       { emoji: '🎯', text: 'Pasek „Cel na dziś” pokazuje, ile serii zostało. Rodzic ustawia cel w zakładce Konto (domyślnie 3).' },
       { emoji: '🏆', text: 'Po serii zobaczysz, gdy pobijesz swój rekord tempa albo pierwszy raz zagrasz bez błędu.' },
       { emoji: '👨‍👩‍👧', text: 'Powtórki ćwiczą całe rodziny działań: pomyłka przy 7 × 8 dokłada też 8 × 7, 56 : 7 i 56 : 8.' },
+      { emoji: '🧠', text: 'Po serii widać, ile działań znasz z pamięci (poniżej 3 sekund).' },
+      { emoji: '🔠', text: 'W Koncie można włączyć duży tekst.' },
     ],
   },
   {

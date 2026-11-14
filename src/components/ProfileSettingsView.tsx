@@ -1030,6 +1030,21 @@ export function ProfileSettingsView({
             </div>
           </div>
 
+          {/* Duży tekst */}
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface-muted)] px-3 py-2.5 cursor-pointer">
+            <span>
+              <span className="block text-sm font-bold text-[var(--th-text)]">Duży tekst</span>
+              <span className="block text-xs text-[var(--th-text-muted)]">Wszystko o ok. 12% większe — wygodniej dla młodszych dzieci.</span>
+            </span>
+            <input
+              type="checkbox"
+              className="w-6 h-6 accent-[var(--th-primary)] cursor-pointer"
+              checked={Boolean(activeProfile.settings.largeText)}
+              onChange={(e) => onUpdateSettings({ largeText: e.target.checked })}
+              data-testid="large-text-toggle"
+            />
+          </label>
+
           {/* Auto-Hint Delay */}
           <div>
             <span className="block text-sm font-bold text-[var(--th-text)] mb-2">

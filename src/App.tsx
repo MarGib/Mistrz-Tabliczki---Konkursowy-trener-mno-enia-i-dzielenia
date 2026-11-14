@@ -123,6 +123,11 @@ export default function App() {
       document.documentElement.style.setProperty(k, String(v));
     }
   }, [cssVars]);
+  // Duży tekst: cała aplikacja w rem, więc wystarczy powiększyć czcionkę bazową.
+  const largeText = Boolean(activeProfile?.settings.largeText);
+  useEffect(() => {
+    document.documentElement.style.fontSize = largeText ? '112.5%' : '';
+  }, [largeText]);
 
   const unreadNotifications = useMemo(
     () => getUnreadNotificationsForProfile(notifications, activeProfile.id),

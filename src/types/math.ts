@@ -129,6 +129,8 @@ export interface AppSettings {
   defaultSeriesLength: number; // 8 | 10 | 12 | 15
   /** Cel dnia: liczba serii (0 = wyłączony). Brak = 3. */
   dailyGoalSeries?: number;
+  /** Większy tekst w całej aplikacji (dla młodszych dzieci). */
+  largeText?: boolean;
 }
 
 export interface ThemePaletteInput {
