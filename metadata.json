@@ -1,0 +1,8 @@
+{
+  "name": "Mistrz Tabliczki — Konkursowy Trener Mnożenia i Dzielenia",
+  "description": "Interaktywna aplikacja edukacyjna przygotowująca do konkursów matematycznych z mnożenia i dzielenia z algorytmem SuperMemo, wizualnymi podpowiedziami i turniejami.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
