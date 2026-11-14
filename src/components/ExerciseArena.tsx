@@ -47,6 +47,7 @@ import { CalculatorKeypad } from './CalculatorKeypad';
 import { CelebrationBurst } from './CelebrationBurst';
 import { VictoryPosterCard } from './VictoryPosterCard';
 import { VisualHintCard } from './VisualHintCard';
+import { setGameActive } from '../autoUpdate';
 
 interface ExerciseArenaProps {
   config: ActiveSeriesConfig;
@@ -133,6 +134,12 @@ export function ExerciseArena({
     }
     return 10;
   }, [config.targetAvgTimeSec]);
+
+  // Cichy release: w trakcie serii zadań nie podmieniamy wersji aplikacji.
+  useEffect(() => {
+    setGameActive(!isFinished);
+    return () => setGameActive(false);
+  }, [isFinished]);
 
   // Manage background music lifecycle inside Arena
   useEffect(() => {

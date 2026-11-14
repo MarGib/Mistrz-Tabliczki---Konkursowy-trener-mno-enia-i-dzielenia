@@ -1,4 +1,5 @@
 import { reloadIfNewVersion } from '../autoUpdate';
+import { deviceHeartbeat } from '../engine/telemetry';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -1399,6 +1400,20 @@ export function useAppStore() {
     },
     [setSyncFor]
   );
+
+  // Zgłoszenie urządzenia dla panelu administratora (najwyżej raz na 12 h, po chwili od startu).
+  useEffect(() => {
+    if (!import.meta.env.PROD) return;
+    const t = window.setTimeout(() => {
+      const owned = storeRef.current.profiles.filter((p) => storeRef.current.ownedProfileIds.includes(p.id));
+      deviceHeartbeat({
+        logins: owned.map((p) => profileLogin(p)),
+        unsent: Object.values(accountSyncRef.current).some((s) => s?.unsent || s?.state === 'waiting'),
+        dbPaused: dbPauseUntilRef.current > Date.now(),
+      });
+    }, 8000);
+    return () => window.clearTimeout(t);
+  }, [store.ownedProfileIds]);
 
   /** „Spróbuj teraz”: natychmiastowa ponowna próba połączenia i wysyłki. */
   const retrySync = useCallback((profileId: string) => {

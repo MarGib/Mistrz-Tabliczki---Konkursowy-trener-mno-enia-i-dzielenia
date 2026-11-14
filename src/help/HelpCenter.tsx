@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { ArrowLeft, Compass, Lightbulb } from 'lucide-react';
+import { HelpRequestForm } from '../components/HelpRequestForm';
 import { HELP_CHAPTERS, HELP_SECTIONS, type HelpSectionId } from './helpContent';
 
 /** Uruchamia przewodnik po aplikacji (nasłuchuje go GuidedTour). */
@@ -132,6 +133,11 @@ export function HelpCenter({ initialSection, onClose }: HelpCenterProps) {
                       <Lightbulb className="w-4 h-4 shrink-0" aria-hidden="true" />
                       <span>{s.tip}</span>
                     </p>
+                  )}
+                  {s.id === 'forgot' && (
+                    <div className="rounded-2xl border border-[var(--th-border)] bg-[var(--th-surface-muted)] p-3">
+                      <HelpRequestForm />
+                    </div>
                   )}
                   {s.id === 'tour' && (
                     <button

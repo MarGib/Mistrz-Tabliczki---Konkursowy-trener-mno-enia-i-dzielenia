@@ -21,6 +21,8 @@ import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
 import { AdminPanel } from './components/AdminPanel';
+import { AppStatusLayer } from './components/AppStatusLayer';
+import { WhatsNewDialog } from './components/WhatsNewDialog';
 import { GuidedTour } from './help/GuidedTour';
 import { MyCertificates } from './components/MyCertificates';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
@@ -201,6 +203,12 @@ export default function App() {
     >
       {adminOpen && <AdminPanel onClose={closeAdmin} />}
       {activeProfile && !showWelcomeGate && (
+        <WhatsNewDialog
+          enabled={!activeSeries && !adminOpen}
+          isNewPlayer={(activeProfile.sessions?.length ?? 0) < 3}
+        />
+      )}
+      {activeProfile && !showWelcomeGate && (
         <GuidedTour
           profileId={activeProfile.id}
           autoStart={(activeProfile.sessions?.length ?? 0) < 3}
@@ -208,6 +216,7 @@ export default function App() {
           onSelectTab={setActiveTab}
         />
       )}
+      {showWelcomeGate && <AppStatusLayer />}
       {showWelcomeGate ? (
         <FamilyWelcomeGate
           ownedProfiles={ownedProfiles}
@@ -249,6 +258,7 @@ export default function App() {
 
           <main className={`flex-1 ${!activeSeries ? 'pb-[calc(5.5rem+var(--mt-install-h,0px)+env(safe-area-inset-bottom))] md:pb-[calc(2rem+var(--mt-install-h,0px))]' : 'pb-6'}`}>
             {!activeSeries && <InstallBanner />}
+            {!activeSeries && !adminOpen && <AppStatusLayer />}
             {!activeSeries && (
               <InviteCard
                 canJoin={accountSync[activeProfile.id]?.state === 'synced'}

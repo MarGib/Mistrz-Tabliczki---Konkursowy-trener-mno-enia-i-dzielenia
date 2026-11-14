@@ -320,9 +320,9 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'forgot',
     chapter: 'account',
     title: 'Nie pamiętam hasła',
-    lead: 'Hasło może ustawić od nowa rodzic (administrator aplikacji).',
+    lead: 'Hasło może ustawić od nowa rodzic (administrator aplikacji). Prośbę wyślesz formularzem poniżej albo z ekranu logowania.',
     steps: [
-      'Poproś rodzica o nowe hasło — ustawi je w panelu administratora.',
+      'Wypełnij formularz „Poproś rodzica o pomoc” (poniżej albo pod przyciskiem „Zaloguj się” → „Nie pamiętam hasła”). Prośba trafi do panelu administratora.',
       'Zaloguj się nowym hasłem: „Mam już konto” → login → nowe hasło.',
       'Na urządzeniach, na których konto było otwarte, pojawi się żółty pasek — wpisz tam nowe hasło.',
     ],

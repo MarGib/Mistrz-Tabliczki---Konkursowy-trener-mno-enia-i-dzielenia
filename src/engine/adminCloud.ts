@@ -26,9 +26,11 @@ import {
   limit,
   orderBy,
   query,
+  updateDoc,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-accounts-config.json';
-import type { UserProfile } from '../types/math';
+import type { SessionRecord, UserProfile } from '../types/math';
+import { type AppStatus, saveAppStatus } from './appStatus';
 import { hashAccountPassword } from './accountSecurity';
 import { secretFromHash } from './accountCloud';
 
@@ -90,6 +92,7 @@ export async function adminSignIn(): Promise<AdminSession> {
   const { auth } = getAdminHandle();
   const provider = new GoogleAuthProvider();
   provider.addScope('https://www.googleapis.com/auth/identitytoolkit');
+  provider.addScope('https://www.googleapis.com/auth/monitoring.read');
   provider.setCustomParameters({ prompt: 'select_account' });
   const result = await signInWithPopup(auth, provider);
   const cred = GoogleAuthProvider.credentialFromResult(result);
@@ -126,6 +129,29 @@ export interface AdminAccountRow {
   lastActiveDate: string;
   updatedAtMs: number;
   groups: string[];
+  /** Ostatnie serie zapisane w chmurze (bez szczegółów zadań). */
+  recent: AdminSessionLite[];
+}
+
+export interface AdminSessionLite {
+  t: number;
+  kind: 'stage' | 'tournament' | 'master' | 'free';
+  mode: string;
+  tasks: number;
+  correct: number;
+  avgMs: number;
+}
+
+function liteSession(s: SessionRecord): AdminSessionLite {
+  const kind = s.masterLevel ? 'master' : s.tournamentId ? 'tournament' : s.stageId ? 'stage' : 'free';
+  return {
+    t: Number(s.timestamp) || 0,
+    kind,
+    mode: String(s.mode ?? ''),
+    tasks: Number(s.totalTasks) || 0,
+    correct: Number(s.correctTasks) || 0,
+    avgMs: Number(s.avgTimeMs) || 0,
+  };
 }
 
 export async function listAccounts(): Promise<AdminAccountRow[]> {
@@ -152,6 +178,7 @@ export async function listAccounts(): Promise<AdminAccountRow[]> {
       lastActiveDate: String(p?.lastActiveDate ?? ''),
       updatedAtMs: acc?.updatedAt?.toMillis?.() ?? 0,
       groups: (p?.circles ?? []).map((c) => `${c.name} (${c.code})`),
+      recent: Array.isArray(p?.sessions) ? p!.sessions.map(liteSession) : [],
     });
   });
   return rows.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
@@ -228,5 +255,209 @@ export async function adminResetPassword(row: AdminAccountRow, newPassword: stri
       throw new Error(`Konto Google nie ma uprawnień do projektu (${detail || 'brak dostępu'}).`);
     }
     throw new Error(`Nie udało się zmienić hasła (${detail || res.status}).`);
+  }
+}
+
+/* ───────────── Telemetria: urządzenia, błędy, prośby o pomoc ───────────── */
+
+function ms(v: unknown): number {
+  const t = v as Timestamp | undefined;
+  return t?.toMillis?.() ?? 0;
+}
+
+export interface DeviceRow {
+  id: string;
+  platform: string;
+  browser: string;
+  installed: boolean;
+  appVersion: string;
+  logins: string[];
+  unsent: boolean;
+  dbPaused: boolean;
+  firstSeenMs: number;
+  lastSeenMs: number;
+}
+
+export async function listDevices(): Promise<DeviceRow[]> {
+  const { db } = getAdminHandle();
+  const snap = await getDocs(collection(db, 'devices'));
+  return snap.docs
+    .map((d) => {
+      const x = d.data() as Record<string, unknown>;
+      return {
+        id: d.id,
+        platform: String(x.platform ?? ''),
+        browser: String(x.browser ?? ''),
+        installed: Boolean(x.installed),
+        appVersion: String(x.appVersion ?? ''),
+        logins: Array.isArray(x.logins) ? (x.logins as string[]) : [],
+        unsent: Boolean(x.unsent),
+        dbPaused: Boolean(x.dbPaused),
+        firstSeenMs: Number(x.firstSeenMs) || 0,
+        lastSeenMs: ms(x.lastSeen),
+      };
+    })
+    .sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+}
+
+export interface AppErrorRow {
+  id: string;
+  message: string;
+  stack: string;
+  appVersion: string;
+  platform: string;
+  device: string;
+  atMs: number;
+}
+
+export async function listAppErrors(max = 100): Promise<AppErrorRow[]> {
+  const { db } = getAdminHandle();
+  const snap = await getDocs(query(collection(db, 'appErrors'), orderBy('at', 'desc'), limit(max)));
+  return snap.docs.map((d) => {
+    const x = d.data() as Record<string, unknown>;
+    return {
+      id: d.id,
+      message: String(x.message ?? ''),
+      stack: String(x.stack ?? ''),
+      appVersion: String(x.appVersion ?? ''),
+      platform: String(x.platform ?? ''),
+      device: String(x.device ?? ''),
+      atMs: ms(x.at),
+    };
+  });
+}
+
+export interface HelpRequestRow {
+  id: string;
+  login: string;
+  topic: string;
+  message: string;
+  contact: string;
+  platform: string;
+  status: 'new' | 'done';
+  atMs: number;
+}
+
+export async function listHelpRequests(max = 100): Promise<HelpRequestRow[]> {
+  const { db } = getAdminHandle();
+  const snap = await getDocs(query(collection(db, 'helpRequests'), orderBy('at', 'desc'), limit(max)));
+  return snap.docs.map((d) => {
+    const x = d.data() as Record<string, unknown>;
+    return {
+      id: d.id,
+      login: String(x.login ?? ''),
+      topic: String(x.topic ?? ''),
+      message: String(x.message ?? ''),
+      contact: String(x.contact ?? ''),
+      platform: String(x.platform ?? ''),
+      status: x.status === 'done' ? 'done' : 'new',
+      atMs: ms(x.at),
+    };
+  });
+}
+
+export async function setHelpRequestDone(id: string): Promise<void> {
+  await updateDoc(doc(getAdminHandle().db, 'helpRequests', id), { status: 'done' });
+}
+
+export async function deleteAdminDocs(col: 'appErrors' | 'helpRequests' | 'devices', ids: string[]): Promise<void> {
+  const { db } = getAdminHandle();
+  await Promise.all(ids.map((id) => deleteDoc(doc(db, col, id)).catch(() => {})));
+}
+
+/* ───────────── Komunikat dla wszystkich / przerwa techniczna ───────────── */
+
+export async function readAppStatusAdmin(): Promise<AppStatus> {
+  const snap = await getDoc(doc(getAdminHandle().db, 'config', 'status'));
+  const x = (snap.exists() ? snap.data() : {}) as Partial<AppStatus>;
+  return {
+    mode: x.mode === 'banner' || x.mode === 'maintenance' ? x.mode : 'off',
+    message: String(x.message ?? ''),
+    untilMs: Number(x.untilMs ?? 0) || 0,
+  };
+}
+
+export async function writeAppStatusAdmin(st: AppStatus): Promise<void> {
+  await saveAppStatus(getAdminHandle().db, st);
+}
+
+/* ───────────── Zużycie bazy (Cloud Monitoring) ───────────── */
+
+export interface DbUsageDay {
+  day: string; // RRRR-MM-DD (czas pacyficzny — wtedy Firebase zeruje dzienne limity)
+  reads: number;
+  writes: number;
+  deletes: number;
+}
+
+export const SPARK_LIMITS = { reads: 50_000, writes: 20_000, deletes: 20_000, storageBytes: 1024 ** 3 };
+
+/**
+ * Dzienne operacje na bazie z ostatnich 14 dni. Wymaga zalogowania Google w tej sesji
+ * (uprawnienie „monitoring.read” daje bycie właścicielem projektu).
+ */
+export async function fetchDbUsage(): Promise<DbUsageDay[]> {
+  if (!hasFreshAdminToken()) throw new Error('Zaloguj się przez Google w tej sesji, aby zobaczyć zużycie bazy.');
+  const projectId = firebaseConfig.projectId;
+  const end = new Date();
+  const start = new Date(end.getTime() - 14 * 24 * 3600_000);
+  const metrics: [keyof Omit<DbUsageDay, 'day'>, string][] = [
+    ['reads', 'firestore.googleapis.com/document/read_ops_count'],
+    ['writes', 'firestore.googleapis.com/document/write_ops_count'],
+    ['deletes', 'firestore.googleapis.com/document/delete_ops_count'],
+  ];
+  const days = new Map<string, DbUsageDay>();
+  const dayKey = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  await Promise.all(
+    metrics.map(async ([key, type]) => {
+      const params = new URLSearchParams({
+        filter: `metric.type = "${type}"`,
+        'interval.startTime': start.toISOString(),
+        'interval.endTime': end.toISOString(),
+        'aggregation.alignmentPeriod': '3600s',
+        'aggregation.perSeriesAligner': 'ALIGN_SUM',
+        'aggregation.crossSeriesReducer': 'REDUCE_SUM',
+      });
+      const res = await fetch(
+        `https://monitoring.googleapis.com/v3/projects/${projectId}/timeSeries?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${accessToken}`, 'X-Goog-User-Project': projectId } }
+      );
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('Brak dostępu do statystyk Google Cloud — zaloguj się ponownie przez Google i zezwól na „odczyt monitoringu”.');
+      }
+      if (!res.ok) throw new Error(`Monitoring odpowiedział błędem ${res.status}.`);
+      const body = (await res.json()) as {
+        timeSeries?: { points?: { interval: { endTime: string }; value: { int64Value?: string } }[] }[];
+      };
+      for (const ts of body.timeSeries ?? []) {
+        for (const p of ts.points ?? []) {
+          const k = dayKey(p.interval.endTime);
+          const row = days.get(k) ?? { day: k, reads: 0, writes: 0, deletes: 0 };
+          row[key] += Number(p.value.int64Value ?? 0);
+          days.set(k, row);
+        }
+      }
+    })
+  );
+  return Array.from(days.values()).sort((a, b) => a.day.localeCompare(b.day));
+}
+
+/* ───────────── Hosting (GitHub Pages) ───────────── */
+
+export interface HostingInfo {
+  appVersion: string;
+  coreBytes: number;
+  totalBytes: number;
+}
+
+export async function fetchHostingInfo(): Promise<HostingInfo | null> {
+  try {
+    const res = await fetch(`./precache.json?v=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const m = (await res.json()) as Partial<HostingInfo>;
+    return { appVersion: String(m.appVersion ?? '?'), coreBytes: Number(m.coreBytes) || 0, totalBytes: Number(m.totalBytes) || 0 };
+  } catch {
+    return null;
   }
 }

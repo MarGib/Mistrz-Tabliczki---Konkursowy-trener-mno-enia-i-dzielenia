@@ -51,6 +51,60 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Telemetria dla panelu administratora — zapis dla każdego (ścisły format), odczyt tylko administrator.
+    match /devices/{deviceId} {
+      allow create, update: if deviceId.size() <= 60 &&
+        incoming().keys().hasOnly(['platform', 'browser', 'installed', 'appVersion', 'logins', 'unsent', 'dbPaused', 'firstSeenMs', 'lastSeen']) &&
+        incoming().platform is string && incoming().platform.size() <= 30 &&
+        incoming().browser is string && incoming().browser.size() <= 30 &&
+        incoming().installed is bool &&
+        incoming().appVersion is string && incoming().appVersion.size() <= 20 &&
+        incoming().logins is list && incoming().logins.size() <= 8 &&
+        incoming().unsent is bool && incoming().dbPaused is bool &&
+        incoming().firstSeenMs is number &&
+        incoming().lastSeen == request.time;
+      allow get, list, delete: if isAdmin();
+    }
+
+    match /appErrors/{errorId} {
+      allow create: if
+        incoming().keys().hasOnly(['message', 'stack', 'appVersion', 'platform', 'device', 'at']) &&
+        incoming().message is string && incoming().message.size() <= 300 &&
+        incoming().stack is string && incoming().stack.size() <= 900 &&
+        incoming().appVersion is string && incoming().appVersion.size() <= 20 &&
+        incoming().platform is string && incoming().platform.size() <= 30 &&
+        incoming().device is string && incoming().device.size() <= 40 &&
+        incoming().at == request.time;
+      allow get, list, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    // Komunikat dla wszystkich (pasek / przerwa techniczna) — czyta każdy, zmienia tylko administrator.
+    match /config/{docId} {
+      allow get: if docId == 'status';
+      allow list: if false;
+      allow write: if isAdmin() && docId == 'status' &&
+        incoming().keys().hasOnly(['mode', 'message', 'untilMs', 'updatedAt']) &&
+        incoming().mode in ['off', 'banner', 'maintenance'] &&
+        incoming().message is string && incoming().message.size() <= 300 &&
+        incoming().untilMs is number;
+    }
+
+    match /helpRequests/{requestId} {
+      allow create: if
+        incoming().keys().hasOnly(['login', 'topic', 'message', 'contact', 'platform', 'device', 'status', 'at']) &&
+        incoming().login is string && incoming().login.size() >= 1 && incoming().login.size() <= 40 &&
+        incoming().topic in ['password', 'login', 'sync', 'other'] &&
+        incoming().message is string && incoming().message.size() <= 500 &&
+        incoming().contact is string && incoming().contact.size() <= 80 &&
+        incoming().platform is string && incoming().platform.size() <= 30 &&
+        incoming().device is string && incoming().device.size() <= 40 &&
+        incoming().status == 'new' &&
+        incoming().at == request.time;
+      allow get, list, delete: if isAdmin();
+      allow update: if isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+    }
+
     // 5. Login → identyfikator profilu (potrzebny, by na nowym urządzeniu sprawdzić hasło).
     match /logins/{login} {
       allow get: if login.size() <= 40;

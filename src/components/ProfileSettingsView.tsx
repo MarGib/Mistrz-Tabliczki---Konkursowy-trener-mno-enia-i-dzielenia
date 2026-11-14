@@ -45,6 +45,8 @@ import { AvatarDisplay } from './AvatarDisplay';
 import { PasswordInput } from './PasswordInput';
 import { InstallAppButton } from './InstallBanner';
 import { isAdminDevice } from '../engine/adminCloud';
+import { AdminQuickPeek } from './AdminQuickPeek';
+import { WhatsNewDialog } from './WhatsNewDialog';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { AvatarStudio } from './AvatarStudio';
 
@@ -138,6 +140,7 @@ export function ProfileSettingsView({
   onResetLocalData,
   onReopenProfilePicker,
 }: ProfileSettingsViewProps) {
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [newSchool, setNewSchool] = useState('');
   const [newClass, setNewClass] = useState('');
@@ -369,17 +372,15 @@ export function ProfileSettingsView({
           >
             🧭 Uruchom przewodnik po aplikacji
           </button>
-          {isAdminDevice() && (
-            <button
-              type="button"
-              onClick={() => {
-                window.location.hash = 'admin';
-              }}
-              className="w-full min-h-[40px] rounded-xl border border-dashed border-[var(--th-border)] text-sm font-bold text-[var(--th-text)] hover:border-[var(--th-primary)] cursor-pointer"
-            >
-              🛡️ Panel administratora
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowWhatsNew(true)}
+            className="w-full min-h-[40px] rounded-xl border border-[var(--th-border)] text-sm font-bold text-[var(--th-text)] hover:border-[var(--th-primary)] cursor-pointer inline-flex items-center justify-center gap-2"
+          >
+            ✨ Co nowego w aplikacji
+          </button>
+          {showWhatsNew && <WhatsNewDialog enabled isNewPlayer={false} forceOpen onClose={() => setShowWhatsNew(false)} />}
+          {isAdminDevice() && <AdminQuickPeek />}
           {!activeProfile.cloudUid && (
             <p className="text-[11px] text-[var(--th-text-muted)] -mt-2">
               To konto nie jest jeszcze w chmurze — „Wyloguj” wróci do wyboru kont, a wyniki zostaną na tym urządzeniu.
@@ -1213,6 +1214,9 @@ export function ProfileSettingsView({
           })}
         </div>
       </section>
+      <p className="text-center text-[11px] text-[var(--th-text-muted)] pb-2" data-testid="app-version">
+        Mistrz Tabliczki · wersja {__APP_VERSION__}
+      </p>
     </div>
   );
 }

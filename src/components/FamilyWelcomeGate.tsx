@@ -24,6 +24,7 @@ import { computeUserLevel } from '../engine/spacedRepetition';
 import type { CloudSyncStatus } from '../store/useAppStore';
 import type { DeviceProfile, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
+import { HelpRequestForm } from './HelpRequestForm';
 import { PasswordInput } from './PasswordInput';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { readPendingInvite } from './InviteCard';
@@ -83,6 +84,7 @@ export function FamilyWelcomeGate({
 
   // Existing login + password form
   const [existingLogin, setExistingLogin] = useState('');
+  const [showHelpRequest, setShowHelpRequest] = useState(false);
   const [existingPassword, setExistingPassword] = useState('');
   const [existingError, setExistingError] = useState<string | null>(null);
 
@@ -665,7 +667,19 @@ export function FamilyWelcomeGate({
                     >
                       {existingBusy ? 'Logowanie…' : 'Zaloguj się'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowHelpRequest((v) => !v)}
+                      className="w-full min-h-[40px] text-sm font-bold text-[var(--th-primary)] underline cursor-pointer"
+                    >
+                      Nie pamiętam hasła / loginu — poproś o pomoc
+                    </button>
                   </form>
+                )}
+                {showHelpRequest && (
+                  <div className="mt-3 rounded-2xl border border-[var(--th-border)] bg-[var(--th-surface)] p-3">
+                    <HelpRequestForm defaultLogin={existingLogin} onDone={() => setShowHelpRequest(false)} />
+                  </div>
                 )}
               </div>
             )}

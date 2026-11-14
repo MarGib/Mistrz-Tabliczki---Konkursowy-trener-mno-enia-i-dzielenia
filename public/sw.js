@@ -19,7 +19,16 @@ self.addEventListener('install', (event) => {
         CACHE = PREFIX + m.version;
         const c = await caches.open(CACHE);
         // Rdzeń aplikacji (kod, style, czcionki, ikony) — musi się udać, by działać offline.
-        await c.addAll(['./', ...m.core.map((f) => './' + f)]);
+        // Pliki z odciskiem w nazwie (assets/*-hash.*) nigdy się nie zmieniają — bierzemy je ze starej wersji,
+        // zamiast pobierać ponownie. Dzięki temu aktualizacja pobiera tylko to, co naprawdę nowe.
+        const fresh = [];
+        for (const f of m.core) {
+          const url = './' + f;
+          const old = /^assets\/.+-[\w-]{6,}\.\w+$/.test(f) ? await caches.match(url) : undefined;
+          if (old) await c.put(url, old);
+          else fresh.push(url);
+        }
+        await c.addAll(['./', ...fresh]);
         await c.put('./precache.json', new Response(JSON.stringify(m)));
       } catch {
         // Bez sieci przy instalacji — zostajemy przy poprzedniej wersji.
@@ -50,6 +59,11 @@ self.addEventListener('activate', (event) => {
         for (const f of m.extra) {
           const url = './' + f;
           if (await c.match(url)) continue;
+          const prev = /^assets\/.+-[\w-]{6,}\.\w+$/.test(f) ? await caches.match(url) : undefined;
+          if (prev) {
+            await c.put(url, prev);
+            continue;
+          }
           try {
             const res = await fetch(url);
             if (res.ok) await c.put(url, res);
