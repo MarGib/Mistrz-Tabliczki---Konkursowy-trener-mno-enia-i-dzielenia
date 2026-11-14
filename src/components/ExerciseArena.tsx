@@ -97,6 +97,8 @@ export function ExerciseArena({
   const [totalPoints, setTotalPoints] = useState(0);
   const [showHint, setShowHint] = useState(false);
   const [hintAutoTriggered, setHintAutoTriggered] = useState(false);
+  // Użytkownik zwinął podpowiedź w tym zadaniu — nie otwieraj jej ponownie automatycznie.
+  const [hintDismissed, setHintDismissed] = useState(false);
   const [feedback, setFeedback] = useState<{
     isCorrect: boolean;
     points: number;
@@ -150,7 +152,8 @@ export function ExerciseArena({
       if (
         settings.autoHintDelaySec > 0 &&
         elapsed >= settings.autoHintDelaySec * 1000 &&
-        !showHint
+        !showHint &&
+        !hintDismissed
       ) {
         setShowHint(true);
         setHintAutoTriggered(true);
@@ -180,6 +183,7 @@ export function ExerciseArena({
     settings.autoHintDelaySec,
     settings.soundEnabled,
     showHint,
+    hintDismissed,
   ]);
 
   const visualHint = useMemo(() => {
@@ -268,6 +272,7 @@ export function ExerciseArena({
         setFeedback(null);
         setShowHint(false);
         setHintAutoTriggered(false);
+        setHintDismissed(false);
         setElapsedTaskMs(0);
         lastTickSecRef.current = -1;
         taskStartRef.current = Date.now();
@@ -394,6 +399,7 @@ export function ExerciseArena({
     setTotalPoints(0);
     setShowHint(false);
     setHintAutoTriggered(false);
+    setHintDismissed(false);
     setFeedback(null);
     setElapsedTaskMs(0);
     setIsFinished(false);
@@ -821,7 +827,7 @@ export function ExerciseArena({
             )}
 
             {/* Big Equation Display */}
-            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-7 pb-3 sm:pt-8 sm:pb-6">
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-3 pb-1 sm:pt-8 sm:pb-6">
               <span
                 className="font-display text-4xl sm:text-6xl font-extrabold tracking-tight text-[var(--th-text)] tabular-nums"
                 data-testid="equation-text"
@@ -852,96 +858,102 @@ export function ExerciseArena({
               </div>
             </div>
 
-            {/* Inline Feedback or Hint Action */}
-            {feedback ? (
-              <div
-                className={`mt-4 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border ${
-                  feedback.isCorrect
+            {/* Stały slot pod działaniem: przycisk podpowiedzi / podpowiedź / informacja zwrotna.
+                Ma stałą wysokość, więc nic nie przesuwa działania ani klawiatury. */}
+            <div
+              data-testid="hint-slot"
+              className={`mt-2 sm:mt-4 h-[124px] sm:h-[140px] rounded-2xl border px-3 sm:px-4 py-2 sm:py-3 overflow-hidden transition-colors ${
+                feedback
+                  ? feedback.isCorrect
                     ? isDark
                       ? 'bg-emerald-950/45 border-emerald-700 text-emerald-100'
                       : 'bg-emerald-50 border-emerald-200 text-emerald-900'
                     : isDark
                     ? 'bg-red-950/45 border-red-700 text-red-100'
                     : 'bg-red-50 border-red-200 text-red-900'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  {feedback.isCorrect ? (
-                    <CheckCircle2
-                      className="w-5 h-5 shrink-0 text-emerald-500"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <XCircle
-                      className="w-5 h-5 shrink-0 text-red-500"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <div className="text-sm font-semibold">
-                    {feedback.isCorrect ? (
-                      <span>
-                        {feedback.timeMs <= FAST_THRESHOLD_MS
-                          ? 'Błyskawicznie na wyrywki!'
-                          : 'Brawo, poprawna odpowiedź!'}{' '}
-                        <span className="tabular-nums font-bold">
-                          +{feedback.points} XP · {formatSeconds(feedback.timeMs)} s
+                  : showHint && visualHint
+                  ? isDark
+                    ? 'bg-amber-950/40 border-amber-700/60'
+                    : 'bg-amber-50 border-amber-200'
+                  : 'border-transparent'
+              }`}
+            >
+              {feedback ? (
+                feedback.isCorrect ? (
+                  <div className="h-full flex items-center justify-center gap-2.5 text-center">
+                    <CheckCircle2 className="w-6 h-6 shrink-0 text-emerald-500" aria-hidden="true" />
+                    <div className="text-sm sm:text-base font-semibold">
+                      {feedback.timeMs <= FAST_THRESHOLD_MS
+                        ? 'Błyskawicznie na wyrywki!'
+                        : 'Brawo, poprawna odpowiedź!'}{' '}
+                      <span className="tabular-nums font-bold whitespace-nowrap">
+                        +{feedback.points} XP · {formatSeconds(feedback.timeMs)} s
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 text-sm sm:text-base font-semibold">
+                        <XCircle className="w-5 h-5 shrink-0 text-red-500" aria-hidden="true" />
+                        <span className="truncate">
+                          Wynik:{' '}
+                          <strong className="font-display text-xl tabular-nums">
+                            {feedback.correctAnswer}
+                          </strong>
                         </span>
-                      </span>
-                    ) : (
-                      <span>
-                        Poprawny wynik to{' '}
-                        <strong className="font-display text-base tabular-nums">
-                          {feedback.correctAnswer}
-                        </strong>
-                        . Zobacz podpowiedź poniżej, żeby lepiej zapamiętać!
-                      </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => advanceToNext(attempts)}
+                        className="min-h-[44px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] text-sm font-bold flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                      >
+                        <span>Następne</span>
+                        <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                    {visualHint && (
+                      <div className="flex-1 min-h-0">
+                        <VisualHintCard hint={visualHint} isDark={isDark} bare />
+                      </div>
                     )}
                   </div>
-                </div>
-
-                {!feedback.isCorrect && (
+                )
+              ) : showHint && visualHint ? (
+                <VisualHintCard
+                  hint={visualHint}
+                  isAutoTriggered={hintAutoTriggered}
+                  isDark={isDark}
+                  onCollapse={() => {
+                    setShowHint(false);
+                    setHintAutoTriggered(false);
+                    setHintDismissed(true);
+                  }}
+                />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center gap-2">
                   <button
                     type="button"
-                    onClick={() => advanceToNext(attempts)}
-                    className="px-4 py-2.5 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] text-sm font-bold flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                    onClick={() => {
+                      setShowHint(true);
+                      setHintAutoTriggered(false);
+                    }}
+                    className={`min-h-[48px] px-5 rounded-2xl text-sm sm:text-base font-semibold border flex items-center gap-2 transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-amber-200 bg-amber-950/50 hover:bg-amber-900/50 border-amber-700/60'
+                        : 'text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200'
+                    }`}
                   >
-                    <span>Następne</span>
-                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                    <Lightbulb className="w-5 h-5" aria-hidden="true" />
+                    <span>Pokaż podpowiedź</span>
                   </button>
-                )}
-              </div>
-            ) : (
-              <div className="mt-4 flex items-center justify-between gap-3 pt-3 border-t border-[var(--th-border)]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowHint((v) => !v);
-                    setHintAutoTriggered(false);
-                  }}
-                  className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold border flex items-center gap-2 transition-colors cursor-pointer ${
-                    isDark
-                      ? 'text-amber-200 bg-amber-950/50 hover:bg-amber-900/50 border-amber-700/60'
-                      : 'text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200'
-                  }`}
-                >
-                  <Lightbulb className="w-4 h-4" aria-hidden="true" />
-                  <span>{showHint ? 'Ukryj podpowiedź' : 'Pokaż podpowiedź wizualną'}</span>
-                </button>
-                <span className="text-xs text-[var(--th-text-muted)] hidden sm:inline">
-                  Możesz też użyć klawiatury komputera (0–9, Enter)
-                </span>
-              </div>
-            )}
+                  <span className="text-xs text-[var(--th-text-muted)] hidden lg:inline">
+                    Możesz też użyć klawiatury komputera (0–9, Enter)
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-
-          {/* Smart Visual Hint Card */}
-          {showHint && visualHint && (
-            <VisualHintCard
-              hint={visualHint}
-              isAutoTriggered={hintAutoTriggered}
-              isDark={isDark}
-            />
-          )}
         </div>
 
         {/* Right / Bottom Stage: Calculator Keypad */}

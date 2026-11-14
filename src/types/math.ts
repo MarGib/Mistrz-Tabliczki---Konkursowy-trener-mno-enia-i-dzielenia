@@ -267,6 +267,26 @@ export interface VisualHintData {
   groupCount?: number; // for division
   groupSize?: number;
   highlightNote: string;
+  /** Kolorowe części rozkładu do szybkiego spojrzenia, np. [5 × 8 = 40] + [2 × 8 = 16]. */
+  parts?: VisualHintPart[];
+  /** Jak połączyć części: dodać, odjąć, albo wziąć połowę jedynej części. */
+  joiner?: '+' | '−' | 'half';
+  /** Bardzo krótka wskazówka (max ~40 znaków) pod rozkładem. */
+  shortTip?: string;
+  /** Dzielenie: liczenie wielokrotnościami dzielnika od wygodnej „kotwicy”. */
+  division?: {
+    divisor: number;
+    dividend: number;
+    anchorK: number;
+    anchorValue: number;
+    multiples: number[];
+  };
+}
+
+export interface VisualHintPart {
+  label: string;
+  value: number;
+  tone: 'blue' | 'amber';
 }
 
 export interface ActiveSeriesConfig {

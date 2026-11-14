@@ -197,6 +197,15 @@ const MEMORY_RHYMES: Record<string, string> = {
 /**
  * Generates an intuitive, kid-friendly visual decomposition + mnemonic hint for any multiplication or division problem.
  */
+function buildDivisionLadder(dividend: number, divisor: number, quotient: number) {
+  const MAX_STEPS = 6;
+  let anchorK = quotient >= 10 ? 10 : quotient > 5 ? 5 : 0;
+  if (quotient - anchorK > MAX_STEPS) anchorK = quotient - MAX_STEPS;
+  const multiples: number[] = [];
+  for (let k = anchorK + 1; k <= quotient; k += 1) multiples.push(k * divisor);
+  return { divisor, dividend, anchorK, anchorValue: anchorK * divisor, multiples };
+}
+
 export function generateVisualHint(problem: MathProblem): VisualHintData {
   if (problem.op === 'mul') {
     const { a, b } = problem;
@@ -218,6 +227,12 @@ export function generateVisualHint(problem: MathProblem): VisualHintData {
         cols: Math.min(b, 12),
         splitRow: Math.min(a, 10) > 5 ? 5 : Math.floor(Math.min(a, 10) / 2),
         highlightNote: `Zauważ: przy mnożeniu przez 9 suma cyfr wyniku do 90 zawsze wynosi 9!`,
+        parts: [
+          { label: `10 × ${other}`, value: tenTimes, tone: 'blue' },
+          { label: `1 × ${other}`, value: other, tone: 'amber' },
+        ],
+        joiner: '−',
+        shortTip: `10 razy ${other}, potem zabierz jedno ${other}`,
       };
     }
 
@@ -233,6 +248,9 @@ export function generateVisualHint(problem: MathProblem): VisualHintData {
         cols: Math.min(b, 12),
         splitRow: Math.min(a, 10) > 5 ? 5 : undefined,
         highlightNote: `Każdy wynik mnożenia przez 5 kończy się cyfrą 0 lub 5.`,
+        parts: [{ label: `10 × ${other}`, value: tenTimes, tone: 'blue' }],
+        joiner: 'half',
+        shortTip: `× 5 to połowa z × 10`,
       };
     }
 
@@ -251,6 +269,12 @@ export function generateVisualHint(problem: MathProblem): VisualHintData {
         cols: Math.min(b, 12),
         splitRow: 5,
         highlightNote: `Niebieskie klocki to 5 rzędów (${part1}), a bursztynowe to pozostałe ${rem} rzędy (${part2}).`,
+        parts: [
+          { label: `5 × ${b}`, value: part1, tone: 'blue' },
+          { label: `${rem} × ${b}`, value: part2, tone: 'amber' },
+        ],
+        joiner: '+',
+        shortTip: `Rozbij ${a} na 5 i ${rem}`,
       };
     }
 
@@ -266,6 +290,15 @@ export function generateVisualHint(problem: MathProblem): VisualHintData {
         cols: Math.min(a, 14),
         splitRow: Math.floor(Math.min(b, 10) / 2),
         highlightNote: `Dziesiątki liczy się błyskawicznie: ${tens} × ${b} = ${tens * b}.`,
+        parts:
+          ones > 0
+            ? [
+                { label: `${tens} × ${b}`, value: tens * b, tone: 'blue' },
+                { label: `${ones} × ${b}`, value: ones * b, tone: 'amber' },
+              ]
+            : [{ label: `${tens} × ${b}`, value: tens * b, tone: 'blue' }],
+        joiner: '+',
+        shortTip: ones > 0 ? `Rozbij ${a} na ${tens} i ${ones}` : `Policz ${tens / 10} × ${b} i dopisz 0`,
       };
     }
 
@@ -282,6 +315,12 @@ export function generateVisualHint(problem: MathProblem): VisualHintData {
       cols: Math.min(b, 12),
       splitRow: halfRows,
       highlightNote: `Policz kropki w pierwszym bloku i dodaj drugi blok.`,
+      parts: [
+        { label: `${halfRows} × ${b}`, value: halfRows * b, tone: 'blue' },
+        { label: `${remRows} × ${b}`, value: remRows * b, tone: 'amber' },
+      ],
+      joiner: '+',
+      shortTip: `Rozbij ${a} na ${halfRows} i ${remRows}`,
     };
   }
 
@@ -301,5 +340,7 @@ export function generateVisualHint(problem: MathProblem): VisualHintData {
     groupCount: divisor,
     groupSize: quotient,
     highlightNote: `Rozdajemy ${dividend} elementów po równo do ${divisor} koszyków.`,
+    division: buildDivisionLadder(dividend, divisor, quotient),
+    shortTip: `Licz co ${divisor}, aż dojdziesz do ${dividend}`,
   };
 }
