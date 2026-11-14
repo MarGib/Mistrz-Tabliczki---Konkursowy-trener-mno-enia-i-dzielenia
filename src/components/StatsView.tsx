@@ -129,10 +129,10 @@ export function StatsView({
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)]">
-            Statystyki Graczy, Klas i Pamięć SuperMemo
+            Statystyki i ranking
           </h1>
           <p className="mt-1 text-sm sm:text-base text-[var(--th-text-muted)]">
-            Porównuj wyniki, tempo na wykresie oraz rywalizację między klasami i szkołami ({profiles.length} {profiles.length === 1 ? 'gracz' : 'graczy'}).
+            Wybierz grupę powyżej, aby porównać wyniki z rodziną lub znajomymi ({profiles.length} {profiles.length === 1 ? 'gracz' : 'graczy'}).
           </p>
         </div>
         {difficultFacts.length > 0 && (
@@ -184,7 +184,7 @@ export function StatsView({
                 Tabela Wyników ({profiles.length} {profiles.length === 1 ? 'użytkownik' : 'użytkowników'})
               </h2>
               <p className="text-xs text-[var(--th-text-muted)]">
-                Każdy gracz chroni własne konto, a wyniki klasy, znajomych lub rodziny można porównywać na żywo.
+                Ranking wybranej grupy — aktualizuje się na żywo, gdy ktoś skończy serię.
               </p>
             </div>
           </div>
@@ -334,7 +334,7 @@ export function StatsView({
       </section>
 
       {/* Inter-Class & Inter-School Competition Standings */}
-      {(familySummary.classStandings.length > 0 || familySummary.schoolStandings.length > 0) && (
+      {false && (familySummary.classStandings.length > 0 || familySummary.schoolStandings.length > 0) && (
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {familySummary.classStandings.length > 0 && (
             <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 space-y-3">

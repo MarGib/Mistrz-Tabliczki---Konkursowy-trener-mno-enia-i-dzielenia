@@ -1,0 +1,128 @@
+import { useEffect, useRef } from 'react';
+import { ArrowLeft, Lightbulb } from 'lucide-react';
+import { HELP_SECTIONS, type HelpSectionId } from './helpContent';
+
+interface HelpCenterProps {
+  initialSection: HelpSectionId;
+  onClose: () => void;
+}
+
+export function HelpCenter({ initialSection, onClose }: HelpCenterProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = document.getElementById(`help-${initialSection}`);
+    if (el && scrollRef.current) {
+      scrollRef.current.scrollTop = el.offsetTop - 64;
+    }
+  }, [initialSection]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const jump = (id: HelpSectionId) => {
+    const el = document.getElementById(`help-${id}`);
+    if (el && scrollRef.current) scrollRef.current.scrollTo({ top: el.offsetTop - 64, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex justify-end" role="dialog" aria-modal="true" aria-label="Pomoc">
+      <button
+        type="button"
+        aria-label="Zamknij pomoc"
+        onClick={onClose}
+        className="hidden md:block flex-1 bg-black/40 cursor-default"
+      />
+      <div
+        ref={scrollRef}
+        className="relative w-full md:max-w-xl h-full overflow-y-auto bg-[var(--th-canvas)] text-[var(--th-text)] shadow-2xl"
+        data-testid="help-center"
+      >
+        <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2.5 bg-[var(--th-surface)] border-b border-[var(--th-border)]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[44px] px-3 rounded-xl border border-[var(--th-border)] font-bold text-sm inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            Wróć
+          </button>
+          <h2 className="font-display text-lg font-extrabold">Jak to działa?</h2>
+        </div>
+
+        <nav className="px-4 pt-4 flex flex-wrap gap-1.5" aria-label="Spis treści pomocy">
+          {HELP_SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => jump(s.id)}
+              className={`min-h-[36px] px-3 rounded-full border text-xs font-bold cursor-pointer ${
+                s.id === initialSection
+                  ? 'bg-[var(--th-primary)] border-[var(--th-primary)] text-[var(--th-primary-fg)]'
+                  : 'bg-[var(--th-surface)] border-[var(--th-border)]'
+              }`}
+            >
+              {s.title}
+            </button>
+          ))}
+        </nav>
+
+        <div className="px-4 py-4 space-y-5">
+          {HELP_SECTIONS.map((s) => (
+            <section
+              key={s.id}
+              id={`help-${s.id}`}
+              className={`rounded-3xl border p-4 space-y-3 bg-[var(--th-surface)] ${
+                s.id === initialSection ? 'border-[var(--th-primary)] border-2' : 'border-[var(--th-border)]'
+              }`}
+            >
+              <h3 className="font-display text-lg font-extrabold">{s.title}</h3>
+              <p className="text-sm">{s.lead}</p>
+              <ol className="space-y-1.5">
+                {s.steps.map((step, i) => (
+                  <li key={i} className="flex gap-2.5 text-sm">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold flex items-center justify-center">
+                      {i + 1}
+                    </span>
+                    <span className="pt-0.5">{step}</span>
+                  </li>
+                ))}
+              </ol>
+              {s.image && (
+                <img
+                  src={`${import.meta.env.BASE_URL}${s.image}`}
+                  alt={s.imageAlt ?? ''}
+                  loading="lazy"
+                  className="w-full rounded-2xl border border-[var(--th-border)] bg-white"
+                />
+              )}
+              {s.tip && (
+                <p className="text-xs rounded-xl bg-amber-50 border border-amber-200 text-amber-950 px-3 py-2 flex gap-2">
+                  <Lightbulb className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  <span>{s.tip}</span>
+                </p>
+              )}
+            </section>
+          ))}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full min-h-[48px] rounded-2xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] font-bold cursor-pointer"
+          >
+            Wróć do aplikacji
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

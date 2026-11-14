@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Check, Copy, Eye, EyeOff, LogOut, PartyPopper, Plus, Send, Settings2, Users, UsersRound } from 'lucide-react';
+import { HelpButton } from '../help/HelpButton';
+import { Check, Copy, Eye, EyeOff, LogOut, PartyPopper, Plus, Send, Settings2, Users } from 'lucide-react';
 
 export function inviteLink(code: string): string {
   const base = `${window.location.origin}${window.location.pathname}`;
@@ -42,6 +43,9 @@ interface GroupsPanelProps {
   onLeaveGroup: (circleId: string) => Promise<{ ok: boolean; error?: string }>;
   onSetShare: (circleId: string, share: boolean) => void;
   onOpenAccount: () => void;
+  /** Tylko do zrzutów ekranu w instrukcji. */
+  demoJustCreated?: CircleMembership;
+  demoManageOpen?: boolean;
 }
 
 /**
@@ -60,14 +64,16 @@ export function GroupsPanel({
   onLeaveGroup,
   onSetShare,
   onOpenAccount,
+  demoJustCreated,
+  demoManageOpen,
 }: GroupsPanelProps) {
-  const [manageOpen, setManageOpen] = useState(circles.length === 0);
+  const [manageOpen, setManageOpen] = useState(demoManageOpen ?? circles.length === 0);
   const [newName, setNewName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [justCreated, setJustCreated] = useState<CircleMembership | null>(null);
+  const [justCreated, setJustCreated] = useState<CircleMembership | null>(demoJustCreated ?? null);
   const [shareNote, setShareNote] = useState<string | null>(null);
 
   const doShare = async (c: CircleMembership) => {
@@ -117,13 +123,13 @@ export function GroupsPanel({
 
   return (
     <section
-      className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 pt-4"
+      className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 pt-4"
       aria-label="Grupy"
       data-testid="groups-panel"
     >
       <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-3 sm:p-4 shadow-sm space-y-3">
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-          <UsersRound className="w-5 h-5 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
+          <HelpButton section="groups" label="Grupy" />
           <button type="button" className={chip(!selectedCircleId)} onClick={() => onSelectCircle(null)}>
             Moje konta
           </button>
@@ -156,6 +162,7 @@ export function GroupsPanel({
           >
             <div className="flex items-start gap-2.5">
               <PartyPopper className="w-6 h-6 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
+              <HelpButton section="group-create" label="Zapraszanie" className="order-last ml-auto -mt-1.5" />
               <div>
                 <p className="font-display text-lg font-extrabold text-[var(--th-text)]">
                   Grupa „{justCreated.name}” gotowa!
@@ -273,6 +280,7 @@ export function GroupsPanel({
                     <label htmlFor="new-group-name" className="block text-xs font-bold text-[var(--th-text)]">
                       Załóż nową grupę
                     </label>
+                    <HelpButton section="group-create" label="Zakładanie grupy" className="float-right -mt-7" />
                     <div className="flex gap-2">
                       <input
                         id="new-group-name"
@@ -301,6 +309,7 @@ export function GroupsPanel({
                     <label htmlFor="join-group-code" className="block text-xs font-bold text-[var(--th-text)]">
                       Dołącz kodem od znajomego
                     </label>
+                    <HelpButton section="group-join" label="Dołączanie do grupy" className="float-right -mt-7" />
                     <div className="flex gap-2">
                       <input
                         id="join-group-code"
@@ -321,6 +330,11 @@ export function GroupsPanel({
                   </form>
                 </div>
 
+                {circles.length > 0 && (
+                  <p className="text-xs font-bold text-[var(--th-text)] flex items-center gap-1">
+                    Twoje grupy <HelpButton section="visibility" label="Widoczność wyników" />
+                  </p>
+                )}
                 {circles.length > 0 && (
                   <ul className="divide-y divide-[var(--th-border)] border border-[var(--th-border)] rounded-2xl">
                     {circles.map((c) => (

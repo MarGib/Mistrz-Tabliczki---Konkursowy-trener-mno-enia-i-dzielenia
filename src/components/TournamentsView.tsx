@@ -113,7 +113,7 @@ export function TournamentsView({
             Turnieje Konkursowe i Rozgrywki na Czas
           </h1>
           <p className="mt-1.5 text-sm sm:text-base text-[var(--th-text-muted)] max-w-2xl">
-            Rywalizuj ze znajomymi, kolegami z klasy lub innymi szkołami w warunkach prawdziwego konkursu matematycznego. Zdobądź Brąz, Srebro, Złoto lub Puchar Mistrza!
+            Rywalizuj z rodziną i znajomymi z wybranej grupy w warunkach prawdziwego konkursu matematycznego. Zdobądź Brąz, Srebro, Złoto lub Puchar Mistrza!
           </p>
         </div>
       </section>
@@ -240,7 +240,7 @@ export function TournamentsView({
             <Award className="w-6 h-6 text-amber-500 shrink-0" aria-hidden="true" />
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-3 hidden flex-wrap gap-1.5">
             {(
               [
                 { id: 'all', label: 'Wszyscy' },

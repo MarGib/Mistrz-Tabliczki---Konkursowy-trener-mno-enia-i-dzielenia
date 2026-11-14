@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import { UsersRound } from 'lucide-react';
 
 const KEY = 'mt_pending_invite';
@@ -58,10 +59,11 @@ export function InviteCard({ canJoin, alreadyMemberCodes, onJoin, onJoined }: In
   if (!code) return null;
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 pt-3" data-testid="invite-card">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 pt-3" data-testid="invite-card">
       <div className="rounded-2xl border-2 border-[var(--th-primary)] bg-[var(--th-soft-tint)] p-3.5 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex items-start gap-2.5 flex-1">
           <UsersRound className="w-6 h-6 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
+          <HelpButton section="group-join" label="Dołączanie do grupy" className="order-last -mt-1.5" />
           <div className="text-sm text-[var(--th-text)]">
             <p className="font-bold">Masz zaproszenie do grupy (kod {code}).</p>
             <p>

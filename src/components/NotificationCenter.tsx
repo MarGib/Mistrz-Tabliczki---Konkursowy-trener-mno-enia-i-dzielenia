@@ -1,4 +1,5 @@
 import { Award, Bell, CheckCheck, Flame, Trophy, X, Zap } from 'lucide-react';
+import { HelpButton } from '../help/HelpButton';
 import type { FamilyNotification } from '../types/math';
 
 interface NotificationCenterProps {
@@ -53,7 +54,7 @@ export function NotificationCenter({
           <div className="flex items-center gap-2 min-w-0">
             <Bell className="w-4 h-4 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
             <h2 className="font-display text-base font-bold text-[var(--th-text)] truncate">
-              Powiadomienia i Rekordy
+              Powiadomienia i Rekordy <HelpButton section="notifications" label="Powiadomienia" className="align-middle" />
             </h2>
             {unreadCount > 0 && (
               <span className="px-2 py-0.5 rounded-lg bg-[var(--th-accent)] text-[var(--th-accent-fg)] text-xs font-extrabold tabular-nums">

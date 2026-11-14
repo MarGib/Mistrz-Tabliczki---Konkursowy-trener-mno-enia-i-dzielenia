@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import {
   ArrowLeft,
   ArrowRight,
@@ -862,7 +863,7 @@ export function ExerciseArena({
                 Ma stałą wysokość, więc nic nie przesuwa działania ani klawiatury. */}
             <div
               data-testid="hint-slot"
-              className={`mt-2 sm:mt-4 h-[124px] sm:h-[140px] rounded-2xl border px-3 sm:px-4 py-2 sm:py-3 overflow-hidden transition-colors ${
+              className={`relative mt-2 sm:mt-4 h-[124px] sm:h-[140px] rounded-2xl border px-3 sm:px-4 py-2 sm:py-3 overflow-hidden transition-colors ${
                 feedback
                   ? feedback.isCorrect
                     ? isDark
@@ -947,6 +948,7 @@ export function ExerciseArena({
                     <Lightbulb className="w-5 h-5" aria-hidden="true" />
                     <span>Pokaż podpowiedź</span>
                   </button>
+                  <HelpButton section="hints" label="Podpowiedzi" className="absolute right-2 bottom-2" />
                   <span className="text-xs text-[var(--th-text-muted)] hidden lg:inline">
                     Możesz też użyć klawiatury komputera (0–9, Enter)
                   </span>

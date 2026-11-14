@@ -99,6 +99,12 @@ export default function App() {
   );
 
   const cssVars = useMemo(() => themeToCssVariables(activeTheme), [activeTheme]);
+  // Te same zmienne na <html>, żeby nakładki (np. pomoc) poza głównym kontenerem miały kolory motywu.
+  useEffect(() => {
+    for (const [k, v] of Object.entries(cssVars)) {
+      document.documentElement.style.setProperty(k, String(v));
+    }
+  }, [cssVars]);
 
   const unreadNotifications = useMemo(
     () => getUnreadNotificationsForProfile(notifications, activeProfile.id),
@@ -273,7 +279,6 @@ export default function App() {
                 profiles={competitionProfiles}
                 cloudStatus={cloudStatus}
                 cloudError={cloudError}
-                onConnectGoogle={connectGoogleCloud}
                 onStartTournament={(cfg) => setActiveSeries(cfg)}
               />
               </>
@@ -286,7 +291,6 @@ export default function App() {
                 trendProfiles={profiles}
                 cloudStatus={cloudStatus}
                 cloudError={cloudError}
-                onConnectGoogle={connectGoogleCloud}
                 isDark={activeTheme.tokens.isDark}
                 onStartFocusedDrill={(cfg) => setActiveSeries(cfg)}
               />

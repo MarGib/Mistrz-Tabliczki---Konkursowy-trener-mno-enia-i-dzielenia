@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import { CloudOff } from 'lucide-react';
 import { hasAccountPassword, verifyAccountCredentials } from '../engine/accountSecurity';
 import type { AccountSyncState } from '../store/useAppStore';
@@ -37,13 +38,14 @@ export function SyncPrompt({ profile, state, onSubmitPassword }: SyncPromptProps
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 pt-3" data-testid="sync-prompt">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 pt-3" data-testid="sync-prompt">
       <form
         onSubmit={submit}
         className="rounded-2xl border border-amber-300 bg-amber-50 text-amber-950 p-3 flex flex-col sm:flex-row sm:items-center gap-2.5"
       >
         <div className="flex items-start gap-2 flex-1 min-w-0">
           <CloudOff className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
+          <HelpButton section="sync" label="Synchronizacja" className="-mt-1.5 -ml-1 order-last" />
           <p className="text-sm font-semibold">
             {state.state === 'error' && state.message
               ? state.message

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import {
   ArrowLeft,
   ArrowRight,
@@ -472,8 +473,9 @@ export function FamilyWelcomeGate({
                 className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 text-left space-y-3.5 shadow-sm"
               >
                 <div>
-                  <h2 className="font-display text-base sm:text-lg font-extrabold text-[var(--th-text)]">
-                    Nowe konto ucznia / gracza
+                  <h2 className="font-display text-base sm:text-lg font-extrabold text-[var(--th-text)] flex items-center justify-between gap-2">
+                    Nowe konto gracza
+                    <HelpButton section="start" label="Zakładanie konta" />
                   </h2>
                   <p className="text-xs text-[var(--th-text-muted)]">
                     Zaczynasz od 0 XP. Twoja nazwa to też login — zapamiętaj ją razem z hasłem, aby zalogować się na innym urządzeniu.
@@ -616,6 +618,7 @@ export function FamilyWelcomeGate({
                     <div>
                       <h3 className="font-display text-sm font-bold text-[var(--th-text)]">
                         Zaloguj się loginem i hasłem
+                        <HelpButton section="login" label="Logowanie" className="align-middle ml-1" />
                       </h3>
                       <p className="text-xs text-[var(--th-text-muted)]">
                         Wpisz login i hasło swojego konta — pobierzemy Twoje wyniki z chmury.

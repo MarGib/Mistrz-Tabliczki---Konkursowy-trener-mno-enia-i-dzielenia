@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import {
   Award,
   Check,
@@ -354,6 +355,7 @@ export function ProfileSettingsView({
               >
                 Wyloguj
               </button>
+              <HelpButton section="logout" label="Wylogowanie" />
             </div>
           </div>
           {!activeProfile.cloudUid && (
@@ -407,147 +409,6 @@ export function ProfileSettingsView({
               </button>
             </div>
           </form>
-
-          {/* Cloud Sync & Group / Class Code */}
-          <div
-            className="pt-4 border-t border-[var(--th-border)] space-y-3"
-            data-testid="cloud-sync-card"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <Cloud className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
-                <h3 className="font-display text-base font-bold text-[var(--th-text)]">
-                  Konto Google (opcjonalnie)
-                </h3>
-              </div>
-              <span className="text-[11px] font-bold text-[var(--th-primary)]">
-                {cloudStatus === 'synced'
-                  ? 'Zsynchronizowano'
-                  : cloudStatus === 'connecting'
-                  ? 'Łączenie...'
-                  : 'Tylko lokalnie'}
-              </span>
-            </div>
-
-            {!cloudMeta ? (
-              <div className="bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-3.5 space-y-2.5">
-                <p className="text-xs text-[var(--th-text-muted)]">
-                  Połącz z Google, aby mieć te same wyniki na telefonie i komputerze oraz zapraszać znajomych z klasy lub szkoły kodem.
-                </p>
-                <button
-                  type="button"
-                  onClick={onConnectGoogle}
-                  disabled={cloudStatus === 'connecting'}
-                  className="w-full min-h-[42px] px-4 py-2 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-display font-bold text-xs sm:text-sm border-b-3 border-[var(--th-primary-dark)] cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  <Cloud className="w-4 h-4" aria-hidden="true" />
-                  <span>
-                    {cloudStatus === 'connecting'
-                      ? 'Łączenie z Google...'
-                      : 'Połącz z Google (Synchronizacja wyników)'}
-                  </span>
-                </button>
-                {cloudError && (
-                  <p className="text-xs font-bold text-red-500" role="alert">
-                    {cloudError}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] rounded-2xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-[var(--th-text)] truncate">
-                      Konto Google: {cloudMeta.displayName}
-                    </div>
-                    {cloudMeta.email && (
-                      <div className="text-[11px] text-[var(--th-text-muted)] truncate">
-                        {cloudMeta.email}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={onDisconnectGoogle}
-                    className="text-xs font-bold text-[var(--th-text-muted)] hover:text-red-500 inline-flex items-center gap-1 cursor-pointer shrink-0"
-                  >
-                    <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Wyloguj</span>
-                  </button>
-                </div>
-
-                {/* Invite Code */}
-                <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-xl p-2.5 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-semibold text-[var(--th-text-muted)]">
-                      Twój Kod Grupy / Klasy (podaj znajomym lub na drugim urządzeniu)
-                    </div>
-                    <div className="font-mono text-base font-extrabold text-[var(--th-primary)] tracking-wider">
-                      {cloudMeta.joinCode}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopyJoinCode}
-                    className="min-h-[36px] px-3 rounded-xl bg-[var(--th-surface-muted)] border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] inline-flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    {copiedCode ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-[var(--th-primary)]" aria-hidden="true" />
-                        <span>Skopiowano</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>Kopiuj</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Join Another Class / Group Code */}
-                <form onSubmit={handleJoinCodeSubmit} className="space-y-2">
-                  <label
-                    htmlFor="join-group-code-input"
-                    className="block text-xs font-bold text-[var(--th-text)]"
-                  >
-                    Masz kod innej klasy, szkoły lub grupy? Wpisz go tutaj:
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="join-group-code-input"
-                      type="text"
-                      value={joinCodeInput}
-                      onChange={(e) => {
-                        setJoinCodeInput(e.target.value.toUpperCase());
-                        setJoinCodeError(null);
-                      }}
-                      placeholder="np. MT-ABCD"
-                      maxLength={16}
-                      className="flex-1 min-h-[40px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] font-mono text-sm font-bold uppercase"
-                    />
-                    <button
-                      type="submit"
-                      disabled={joiningCode || !joinCodeInput.trim()}
-                      className="min-h-[40px] px-3.5 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold disabled:opacity-50 cursor-pointer shrink-0"
-                    >
-                      {joiningCode ? 'Łączę...' : 'Dołącz'}
-                    </button>
-                  </div>
-                  {joinCodeError && (
-                    <p className="text-xs font-bold text-red-500" role="alert">
-                      {joinCodeError}
-                    </p>
-                  )}
-                  {joinCodeMessage && (
-                    <p className="text-xs font-semibold text-[var(--th-primary)]">
-                      {joinCodeMessage}
-                    </p>
-                  )}
-                </form>
-              </div>
-            )}
-          </div>
 
           {/* Personal Theme Template Quick Switcher */}
           <div className="pt-4 border-t border-[var(--th-border)] space-y-2.5">
@@ -611,6 +472,7 @@ export function ProfileSettingsView({
                 <h3 className="font-display text-base font-bold text-[var(--th-text)]">
                   Login i hasło · synchronizacja
                 </h3>
+                <HelpButton section="sync" label="Synchronizacja" />
               </div>
               <span
                 data-testid="account-sync-status"
@@ -919,6 +781,147 @@ export function ProfileSettingsView({
               </form>
             )}
           </div>
+          {/* Cloud Sync & Group / Class Code */}
+          <details
+            className="pt-4 border-t border-[var(--th-border)] space-y-3"
+            data-testid="cloud-sync-card"
+          >
+            <summary className="flex items-center justify-between gap-2 cursor-pointer min-h-[40px]">
+              <div className="flex items-center gap-1.5">
+                <Cloud className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
+                <h3 className="font-display text-base font-bold text-[var(--th-text)]">
+                  Konto Google (opcjonalnie)
+                </h3>
+              </div>
+              <span className="text-[11px] font-bold text-[var(--th-primary)]">
+                {cloudStatus === 'synced'
+                  ? 'Zsynchronizowano'
+                  : cloudStatus === 'connecting'
+                  ? 'Łączenie...'
+                  : 'Tylko lokalnie'}
+              </span>
+            </summary>
+
+            {!cloudMeta ? (
+              <div className="bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-3.5 space-y-2.5">
+                <p className="text-xs text-[var(--th-text-muted)]">
+                  Połącz z Google, aby mieć te same wyniki na telefonie i komputerze oraz zapraszać znajomych z klasy lub szkoły kodem.
+                </p>
+                <button
+                  type="button"
+                  onClick={onConnectGoogle}
+                  disabled={cloudStatus === 'connecting'}
+                  className="w-full min-h-[42px] px-4 py-2 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-display font-bold text-xs sm:text-sm border-b-3 border-[var(--th-primary-dark)] cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Cloud className="w-4 h-4" aria-hidden="true" />
+                  <span>
+                    {cloudStatus === 'connecting'
+                      ? 'Łączenie z Google...'
+                      : 'Połącz z Google (Synchronizacja wyników)'}
+                  </span>
+                </button>
+                {cloudError && (
+                  <p className="text-xs font-bold text-red-500" role="alert">
+                    {cloudError}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] rounded-2xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-[var(--th-text)] truncate">
+                      Konto Google: {cloudMeta.displayName}
+                    </div>
+                    {cloudMeta.email && (
+                      <div className="text-[11px] text-[var(--th-text-muted)] truncate">
+                        {cloudMeta.email}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onDisconnectGoogle}
+                    className="text-xs font-bold text-[var(--th-text-muted)] hover:text-red-500 inline-flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Wyloguj</span>
+                  </button>
+                </div>
+
+                {/* Invite Code */}
+                <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-xl p-2.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-[var(--th-text-muted)]">
+                      Twój Kod Grupy / Klasy (podaj znajomym lub na drugim urządzeniu)
+                    </div>
+                    <div className="font-mono text-base font-extrabold text-[var(--th-primary)] tracking-wider">
+                      {cloudMeta.joinCode}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyJoinCode}
+                    className="min-h-[36px] px-3 rounded-xl bg-[var(--th-surface-muted)] border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {copiedCode ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-[var(--th-primary)]" aria-hidden="true" />
+                        <span>Skopiowano</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Kopiuj</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Join Another Class / Group Code */}
+                <form onSubmit={handleJoinCodeSubmit} className="space-y-2">
+                  <label
+                    htmlFor="join-group-code-input"
+                    className="block text-xs font-bold text-[var(--th-text)]"
+                  >
+                    Masz kod innej klasy, szkoły lub grupy? Wpisz go tutaj:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="join-group-code-input"
+                      type="text"
+                      value={joinCodeInput}
+                      onChange={(e) => {
+                        setJoinCodeInput(e.target.value.toUpperCase());
+                        setJoinCodeError(null);
+                      }}
+                      placeholder="np. MT-ABCD"
+                      maxLength={16}
+                      className="flex-1 min-h-[40px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] font-mono text-sm font-bold uppercase"
+                    />
+                    <button
+                      type="submit"
+                      disabled={joiningCode || !joinCodeInput.trim()}
+                      className="min-h-[40px] px-3.5 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      {joiningCode ? 'Łączę...' : 'Dołącz'}
+                    </button>
+                  </div>
+                  {joinCodeError && (
+                    <p className="text-xs font-bold text-red-500" role="alert">
+                      {joinCodeError}
+                    </p>
+                  )}
+                  {joinCodeMessage && (
+                    <p className="text-xs font-semibold text-[var(--th-primary)]">
+                      {joinCodeMessage}
+                    </p>
+                  )}
+                </form>
+              </div>
+            )}
+          </details>
+
         </section>
 
         {/* Right: Expandable Range & Ergonomic Settings */}

@@ -1,4 +1,5 @@
 import { BarChart3, Bell, Flame, Home, Palette, Trophy, User } from 'lucide-react';
+import { HelpButton } from '../help/HelpButton';
 import type { DeviceProfile } from '../types/math';
 
 export type NavTab = 'trening' | 'turnieje' | 'statystyki' | 'szablony' | 'konto';
@@ -88,6 +89,7 @@ export function TopNav({
               <span className="truncate max-w-[54px] text-[var(--th-text)]">{userName}</span>
             </div>
 
+            <HelpButton section="start" label="Pomoc" />
             <button
               type="button"
               onClick={onOpenNotifications}
