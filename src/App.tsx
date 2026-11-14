@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { ExerciseArena } from './components/ExerciseArena';
 import { GroupsPanel } from './components/GroupsPanel';
 import { DbNotice, SyncPrompt } from './components/SyncPrompt';
@@ -8,11 +8,7 @@ import { InviteCard, capturePendingInvite } from './components/InviteCard';
 capturePendingInvite();
 import { FamilyWelcomeGate } from './components/FamilyWelcomeGate';
 import { NotificationCenter } from './components/NotificationCenter';
-import { ProfileSettingsView } from './components/ProfileSettingsView';
-import { StatsView } from './components/StatsView';
-import { ThemesView } from './components/ThemesView';
 import { TopNav, type NavTab } from './components/TopNav';
-import { TournamentsView } from './components/TournamentsView';
 import { TrainingHome } from './components/TrainingHome';
 import { findPresetAvatar } from './data/avatars';
 import { resolveThemeById } from './data/themes';
@@ -20,12 +16,26 @@ import { classifyDevice } from './engine/deviceDetector';
 import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
-import { AdminPanel } from './components/AdminPanel';
 import { AppStatusLayer } from './components/AppStatusLayer';
 import { WhatsNewDialog } from './components/WhatsNewDialog';
 import { GuidedTour } from './help/GuidedTour';
-import { MyCertificates } from './components/MyCertificates';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
+
+// Rzadziej używane ekrany wczytują się dopiero przy pierwszym otwarciu (szybszy start na słabszych telefonach).
+const StatsView = lazy(() => import('./components/StatsView').then((m) => ({ default: m.StatsView })));
+const ThemesView = lazy(() => import('./components/ThemesView').then((m) => ({ default: m.ThemesView })));
+const TournamentsView = lazy(() => import('./components/TournamentsView').then((m) => ({ default: m.TournamentsView })));
+const ProfileSettingsView = lazy(() => import('./components/ProfileSettingsView').then((m) => ({ default: m.ProfileSettingsView })));
+const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
+const MyCertificates = lazy(() => import('./components/MyCertificates').then((m) => ({ default: m.MyCertificates })));
+
+function ScreenFallback() {
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-10 text-center text-sm text-[var(--th-text-muted)]" role="status">
+      Wczytywanie…
+    </div>
+  );
+}
 
 function detectCurrentDevice(): DeviceProfile {
   if (typeof window === 'undefined') {
@@ -201,7 +211,11 @@ export default function App() {
       data-active-theme={activeTheme.id}
       data-theme-dark={activeTheme.tokens.isDark ? 'true' : 'false'}
     >
-      {adminOpen && <AdminPanel onClose={closeAdmin} />}
+      {adminOpen && (
+        <Suspense fallback={null}>
+          <AdminPanel onClose={closeAdmin} />
+        </Suspense>
+      )}
       {activeProfile && !showWelcomeGate && (
         <WhatsNewDialog
           enabled={!activeSeries && !adminOpen}
@@ -279,6 +293,7 @@ export default function App() {
                   onRetry={retrySync}
                 />
               ))}
+            <Suspense fallback={<ScreenFallback />}>
             {activeSeries ? (
               <ExerciseArena
                 key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}
@@ -385,6 +400,7 @@ export default function App() {
                 onReopenProfilePicker={reopenProfilePicker}
               />
             )}
+            </Suspense>
           </main>
 
           <NotificationCenter

@@ -42,6 +42,9 @@ jobs:
             exit 1
           fi
 
+      - name: Sprawdź kod i testy (błąd zatrzymuje publikację)
+        run: npm run check
+
       - name: Zbuduj aplikację (Vite)
         run: npm run build
 
