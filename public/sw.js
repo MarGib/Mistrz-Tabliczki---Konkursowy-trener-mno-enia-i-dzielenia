@@ -1,55 +1,113 @@
-/* Mistrz Tabliczki — service worker: aplikacja otwiera się szybko i działa bez internetu.
-   Dane (Firebase) nie są tu buforowane — zawsze idą prosto do sieci. */
-const CACHE = 'mt-shell-v2';
+/* Mistrz Tabliczki — service worker.
+   Zainstalowana aplikacja działa w całości z urządzenia (także bez internetu):
+   przy instalacji pobieramy wszystkie pliki aplikacji, a potem czytamy je z pamięci urządzenia.
+   Dane (Firebase) nie są tu buforowane — zapisy czekają w kolejce bazy na urządzeniu i wysyłają się same. */
+const PREFIX = 'mt-app-';
+let CACHE = PREFIX + 'boot';
+
+async function loadManifest() {
+  const res = await fetch('./precache.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error('brak precache.json');
+  return res.json();
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icon-192.png']))
+    (async () => {
+      try {
+        const m = await loadManifest();
+        CACHE = PREFIX + m.version;
+        const c = await caches.open(CACHE);
+        // Rdzeń aplikacji (kod, style, czcionki, ikony) — musi się udać, by działać offline.
+        await c.addAll(['./', ...m.core.map((f) => './' + f)]);
+        await c.put('./precache.json', new Response(JSON.stringify(m)));
+      } catch {
+        // Bez sieci przy instalacji — zostajemy przy poprzedniej wersji.
+      }
+      self.skipWaiting();
+    })()
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    (async () => {
+      let m = null;
+      try {
+        m = await loadManifest();
+        CACHE = PREFIX + m.version;
+      } catch {
+        // offline — zostawiamy wszystko jak jest
+      }
+      const keys = await caches.keys();
+      if (m && (await caches.has(CACHE))) {
+        await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+      }
+      await self.clients.claim();
+      // Obrazki i zrzuty pomocy dociągamy w tle, po kolei, bez blokowania aplikacji.
+      if (m) {
+        const c = await caches.open(CACHE);
+        for (const f of m.extra) {
+          const url = './' + f;
+          if (await c.match(url)) continue;
+          try {
+            const res = await fetch(url);
+            if (res.ok) await c.put(url, res);
+          } catch {
+            break; // brak sieci — dokończymy przy kolejnym uruchomieniu
+          }
+        }
+      }
+    })()
   );
-  self.clients.claim();
 });
+
+async function currentCache() {
+  const keys = (await caches.keys()).filter((k) => k.startsWith(PREFIX));
+  return caches.open(keys.includes(CACHE) ? CACHE : keys[keys.length - 1] || CACHE);
+}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // Firebase, czcionki itp. — bez ingerencji
+  if (url.origin !== self.location.origin) return; // baza i logowanie — zawsze prosto do sieci
+  if (url.pathname.endsWith('/precache.json')) return;
+  // Sprawdzanie nowej wersji (cache: no-store) — zawsze prosto do sieci.
+  if (req.cache === 'no-store') return;
 
-  // Strona: najpierw sieć (świeża wersja), a bez internetu — kopia.
+  // Strona startowa: świeża wersja z sieci, a bez internetu (albo gdy sieć się wlecze) — z urządzenia.
   if (req.mode === 'navigate') {
     event.respondWith(
-      // cache: 'no-store' — omija pamięć przeglądarki i CDN, więc zawsze dostajemy najnowszą wersję.
-      fetch(req, { cache: 'no-store' })
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('./index.html', copy));
+      (async () => {
+        const c = await currentCache();
+        const cached = (await c.match('./index.html')) || (await c.match('./'));
+        const network = fetch(req, { cache: 'no-store' }).then((res) => {
+          if (res.ok) c.put('./index.html', res.clone());
           return res;
-        })
-        .catch(() => caches.match('./index.html'))
+        });
+        if (!cached) return network;
+        // Słaby internet: po 3 s pokazujemy wersję z urządzenia (nowa wczyta się następnym razem).
+        const timeout = new Promise((resolve) => setTimeout(() => resolve(cached), 3000));
+        return Promise.race([network.catch(() => cached), timeout]);
+      })()
     );
     return;
   }
 
-  // Pliki aplikacji (mają hash w nazwie): z pamięci, a w tle odświeżane.
+  // Pliki aplikacji (z hashem w nazwie), czcionki, obrazki: najpierw z urządzenia.
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    (async () => {
+      const c = await currentCache();
+      const cached = await c.match(req, { ignoreSearch: true });
+      if (cached) return cached;
+      try {
+        const res = await fetch(req);
+        if (res.ok) c.put(req, res.clone());
+        return res;
+      } catch {
+        return new Response('', { status: 504, statusText: 'offline' });
+      }
+    })()
   );
 });

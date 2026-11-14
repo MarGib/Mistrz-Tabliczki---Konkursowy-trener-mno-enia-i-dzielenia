@@ -297,8 +297,9 @@ export function GroupsPanel({
             {!synced ? (
               <div className="text-sm text-[var(--th-text)] space-y-2">
                 <p>
-                  Grupy działają dla kont z hasłem zapisanych w chmurze.{' '}
-                  {accountState?.message ?? 'Ustaw hasło w zakładce Konto, a potem wróć tutaj.'}
+                  Grupy działają dla kont z hasłem i włączoną synchronizacją z chmurą.{' '}
+                  {accountState?.message ??
+                    'W zakładce Konto ustaw hasło i zaznacz „Synchronizuj z chmurą”, a potem wróć tutaj.'}
                 </p>
                 <button
                   type="button"

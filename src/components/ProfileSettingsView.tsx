@@ -518,6 +518,8 @@ export function ProfileSettingsView({
                   ? 'Łączenie…'
                   : accountState?.state === 'error'
                   ? 'Błąd synchronizacji'
+                  : activeProfile.cloudOptOut
+                  ? '📱 Tylko na tym urządzeniu (z wyboru)'
                   : 'Tylko na tym urządzeniu'}
               </span>
               {activeHasPassword && !activeProfile.cloudUid && (

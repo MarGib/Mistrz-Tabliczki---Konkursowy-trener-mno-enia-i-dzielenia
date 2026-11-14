@@ -29,7 +29,7 @@ export function SyncPrompt({ profile, state, onSubmitPassword, onRetry }: SyncPr
     return () => window.clearInterval(id);
   }, [transient]);
 
-  if (!state) return null;
+  if (!state || profile.cloudOptOut) return null;
 
   // Chwilowy problem z siecią/bazą: hasło nie jest potrzebne — tylko informacja i ponawianie.
   if (transient) {
@@ -124,6 +124,45 @@ export function SyncPrompt({ profile, state, onSubmitPassword, onRetry }: SyncPr
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Komunikat dla wszystkich, gdy baza ma chwilowy problem (np. wyczerpany dzienny limit darmowej bazy).
+ * Aplikacja działa normalnie, a wyniki wyślą się same, gdy baza wróci.
+ */
+export function DbNotice({ until, onRetry }: { until: number; onRetry?: () => void }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => tick((x) => x + 1), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const mins = Math.max(1, Math.round((until - Date.now()) / 60_000));
+  return (
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 pt-3" data-testid="db-notice">
+      <div className="rounded-2xl border border-sky-300 bg-sky-50 text-sky-950 p-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <CloudOff className="w-5 h-5 shrink-0 mt-0.5 text-sky-700" aria-hidden="true" />
+          <p className="text-sm font-semibold">
+            Chwilowe problemy z bazą wyników — synchronizacja jest wstrzymana.
+            <span className="block text-xs font-normal text-sky-800 mt-0.5">
+              Możesz dalej bez przeszkód ćwiczyć, grać w turnieje i drukować certyfikaty. Wyniki są zapisane na tym
+              urządzeniu i wyślą się same, gdy baza wróci (kolejna próba za ok. {mins} min).
+            </span>
+          </p>
+          <HelpButton section="offline" label="Bez bazy" className="-mt-1.5 -ml-1 text-sky-800" />
+        </div>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="min-h-[42px] px-4 rounded-xl border border-sky-400 text-sky-900 text-sm font-bold cursor-pointer shrink-0 inline-flex items-center justify-center gap-1.5"
+          >
+            <RefreshCw className="w-4 h-4" aria-hidden="true" /> Spróbuj teraz
+          </button>
+        )}
+      </div>
     </div>
   );
 }

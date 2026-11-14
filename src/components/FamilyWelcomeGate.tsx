@@ -524,6 +524,7 @@ export function FamilyWelcomeGate({
                   </div>
                 </div>
 
+
                 <div>
                   <span className="block text-xs font-bold text-[var(--th-text)] mb-1">
                     Wybierz awatar startowy

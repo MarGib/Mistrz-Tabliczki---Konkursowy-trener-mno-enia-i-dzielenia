@@ -18,6 +18,7 @@ export type HelpSectionId =
   | 'rivalry'
   | 'notifications'
   | 'sync'
+  | 'offline'
   | 'forgot'
   | 'logout'
   | 'parent';
@@ -302,6 +303,18 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
     image: 'help/synchronizacja-czeka.png',
     imageAlt: 'Niebieski pasek: wyniki czekają na wysłanie, licznik i przycisk Spróbuj teraz',
+  },
+  {
+    id: 'offline',
+    chapter: 'account',
+    title: 'Gdy nie ma internetu albo bazy',
+    lead: 'Aplikacja działa w pełni także bez internetu i bez bazy. Synchronizacja dzieje się zawsze, gdy tylko jest to możliwe.',
+    steps: [
+      'Trening, Ścieżka Mistrza, Wyzwanie Mistrza, turnieje, certyfikaty (druk i pobieranie) i Twoje statystyki działają zawsze, również bez internetu.',
+      'Gdy baza jest niedostępna, wyniki czekają na urządzeniu i wysyłają się same później — nawet po zamknięciu aplikacji.',
+      'Gdy baza ma chwilowe problemy (np. wyczerpany dzienny limit darmowej bazy), na górze pojawia się niebieski komunikat — można dalej grać bez przeszkód.',
+      'Bez połączenia z bazą nie odświeżają się tylko: rankingi grup i logowanie na nowym urządzeniu. Wszystko inne działa normalnie.',
+    ],
   },
   {
     id: 'forgot',

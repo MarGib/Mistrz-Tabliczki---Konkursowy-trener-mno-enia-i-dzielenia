@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExerciseArena } from './components/ExerciseArena';
 import { GroupsPanel } from './components/GroupsPanel';
-import { SyncPrompt } from './components/SyncPrompt';
+import { DbNotice, SyncPrompt } from './components/SyncPrompt';
 import { InstallBanner } from './components/InstallBanner';
 import { InviteCard, capturePendingInvite } from './components/InviteCard';
 
@@ -67,6 +67,7 @@ export default function App() {
     resetLocalData,
     accountSync,
     retrySync,
+    dbIssue,
     logoutAccount,
     loginToCloudAccount,
     createAccountWithCloud,
@@ -256,15 +257,18 @@ export default function App() {
                 onJoined={() => handleSelectTab('statystyki')}
               />
             )}
-            {!activeSeries && (
-              <SyncPrompt
-                key={activeProfile.id}
-                profile={activeProfile}
-                state={accountSync[activeProfile.id]}
-                onSubmitPassword={setProfileCredentials}
-                onRetry={retrySync}
-              />
-            )}
+            {!activeSeries &&
+              (dbIssue && dbIssue.until > Date.now() && accountSync[activeProfile.id]?.state !== 'needs-password' ? (
+                <DbNotice until={dbIssue.until} onRetry={() => retrySync(activeProfile.id)} />
+              ) : (
+                <SyncPrompt
+                  key={activeProfile.id}
+                  profile={activeProfile}
+                  state={accountSync[activeProfile.id]}
+                  onSubmitPassword={setProfileCredentials}
+                  onRetry={retrySync}
+                />
+              ))}
             {activeSeries ? (
               <ExerciseArena
                 key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}

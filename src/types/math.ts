@@ -221,6 +221,8 @@ export interface UserProfile {
   id: string;
   /** Tylko dla graczy z grupy: ostatnie serie odtworzone z karty wyników (do wykresu tendencji). */
   trendSessions?: SessionRecord[];
+  /** Konto tylko na tym urządzeniu — bez chmury (świadomy wybór gracza). */
+  cloudOptOut?: boolean;
   /** Najwyższy zaliczony poziom Wyzwania Mistrza (0 = żaden). */
   masterLevel?: number;
   ownerUid?: string;

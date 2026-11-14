@@ -123,6 +123,28 @@ export interface AccountSyncState {
   unsent?: boolean;
 }
 
+/** Ogólny problem z bazą, widoczny dla wszystkich (np. wyczerpany dzienny limit darmowej bazy). */
+export interface DbIssue {
+  kind: 'quota';
+  until: number;
+}
+
+const DB_PAUSE_KEY = 'mt_db_pause_until';
+const DB_PAUSE_LEVEL_KEY = 'mt_db_pause_level';
+
+function readLs(key: string): number {
+  try {
+    return Number(window.localStorage.getItem(key) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function isQuotaError(err: unknown): boolean {
+  const code = String((err as { code?: string })?.code ?? '');
+  return code === 'resource-exhausted' || code === 'auth/quota-exceeded' || code === 'auth/too-many-requests';
+}
+
 /** Ponawianie: 5 s, 15 s, 30 s, 1 min, 2 min, potem co 5 min. */
 const RETRY_STEPS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 300_000];
 
@@ -309,7 +331,7 @@ export function useAppStore() {
     async () => ({ ok: false })
   );
   const loginToCloudAccountRef = useRef<
-    (login: string, password: string) => Promise<{ ok: boolean; error?: string }>
+    (login: string, password: string, opts?: { cloudOnly?: boolean }) => Promise<{ ok: boolean; error?: string }>
   >(async () => ({ ok: false }));
   const linkAccountRef = useRef<(profileId: string, password?: string) => Promise<LinkResult>>(
     async () => 'skip'
@@ -366,6 +388,8 @@ export function useAppStore() {
 
   // Fetch non-PII global school & class directory + global arena scoreboard on mount
   useEffect(() => {
+    // Stara baza (AI Studio) — tylko gdy dawna synchronizacja Google jest włączona.
+    if (!LEGACY_GOOGLE_SYNC_ENABLED) return;
     let active = true;
     void fetchGlobalSchoolDirectory().then((entries) => {
       if (active && entries.length > 0) {
@@ -1043,7 +1067,9 @@ export function useAppStore() {
             if (linked !== 'needs-password') return;
             // Konto w chmurze założono na innym urządzeniu (inny identyfikator profilu) —
             // zaloguj zwykłą drogą: login + hasło, i połącz wyniki z tego urządzenia.
-            const res = await loginToCloudAccountRef.current(normalizeLogin(login || target?.name || ""), trimmed);
+            const res = await loginToCloudAccountRef.current(normalizeLogin(login || target?.name || ""), trimmed, {
+              cloudOnly: true,
+            });
             if (!res.ok) {
               setSyncFor(profileId, { state: 'needs-password', message: res.error ?? 'Nieprawidłowe hasło.' });
             }
@@ -1189,6 +1215,38 @@ export function useAppStore() {
   accountSyncRef.current = accountSync;
   const pendingPasswordsRef = useRef<Map<string, string>>(new Map());
   const linkFailuresRef = useRef<Map<string, number>>(new Map());
+  // Bezpiecznik bazy: przy wyczerpanym limicie wszystkie zapisy z tego urządzenia czekają
+  // (15 → 30 → 60 min), zamiast co chwilę obciążać darmową bazę. Stan przetrwa odświeżenie.
+  const dbPauseUntilRef = useRef<number>(readLs(DB_PAUSE_KEY));
+  const [dbIssue, setDbIssue] = useState<DbIssue | null>(() =>
+    readLs(DB_PAUSE_KEY) > Date.now() ? { kind: 'quota', until: readLs(DB_PAUSE_KEY) } : null
+  );
+  const noteDbError = useCallback((err: unknown) => {
+    if (!isQuotaError(err)) return;
+    const level = readLs(DB_PAUSE_LEVEL_KEY) + 1;
+    const minutes = Math.min(60, 15 * 2 ** (level - 1)) * (0.85 + Math.random() * 0.3);
+    const until = Date.now() + Math.round(minutes * 60_000);
+    dbPauseUntilRef.current = until;
+    try {
+      window.localStorage.setItem(DB_PAUSE_KEY, String(until));
+      window.localStorage.setItem(DB_PAUSE_LEVEL_KEY, String(level));
+    } catch {
+      // ignore
+    }
+    setDbIssue({ kind: 'quota', until });
+  }, []);
+  const noteDbOk = useCallback(() => {
+    if (!dbPauseUntilRef.current && readLs(DB_PAUSE_LEVEL_KEY) === 0) return;
+    dbPauseUntilRef.current = 0;
+    try {
+      window.localStorage.removeItem(DB_PAUSE_KEY);
+      window.localStorage.removeItem(DB_PAUSE_LEVEL_KEY);
+    } catch {
+      // ignore
+    }
+    setDbIssue(null);
+  }, []);
+  const dbPaused = () => dbPauseUntilRef.current > Date.now();
   const linkRetryTimersRef = useRef<Map<string, number>>(new Map());
   const pushedAccountFpRef = useRef<Map<string, string>>(new Map());
 
@@ -1247,6 +1305,17 @@ export function useAppStore() {
       void _password;
       const p = storeRef.current.profiles.find((x) => x.id === profileId);
       if (!p || !p.passwordHash) return 'skip';
+      if (p.cloudOptOut) {
+        setSyncFor(profileId, { state: 'local' });
+        return 'skip';
+      }
+      if (dbPaused()) {
+        const wait = dbPauseUntilRef.current - Date.now() + 1000;
+        window.clearTimeout(linkRetryTimersRef.current.get(profileId));
+        linkRetryTimersRef.current.set(profileId, window.setTimeout(() => void linkAccountRef.current(profileId), wait));
+        pendingPasswordsRef.current.set(profileId, '');
+        return 'error';
+      }
       const login = profileLogin(p);
       setSyncFor(profileId, { state: 'syncing' });
       try {
@@ -1276,6 +1345,7 @@ export function useAppStore() {
         }));
         pendingPasswordsRef.current.delete(profileId);
         linkFailuresRef.current.delete(profileId);
+        noteDbOk();
         setSyncFor(profileId, { state: 'synced' });
         void ensureCircles(profileId);
         return 'synced';
@@ -1289,9 +1359,11 @@ export function useAppStore() {
           return 'needs-password';
         }
         pendingPasswordsRef.current.set(profileId, '');
+        noteDbError(err);
         const n = linkFailuresRef.current.get(profileId) ?? 0;
         linkFailuresRef.current.set(profileId, n + 1);
-        const delay = RETRY_STEPS_MS[Math.min(n, RETRY_STEPS_MS.length - 1)];
+        // Losowe rozrzucenie ponowień (±25%), by przy wielu użytkownikach nie uderzali w bazę jednocześnie.
+        const delay = Math.round(RETRY_STEPS_MS[Math.min(n, RETRY_STEPS_MS.length - 1)] * (0.75 + Math.random() * 0.5));
         window.clearTimeout(linkRetryTimersRef.current.get(profileId));
         linkRetryTimersRef.current.set(
           profileId,
@@ -1305,13 +1377,32 @@ export function useAppStore() {
         return 'error';
       }
     },
-    [mergeCloudIntoLocal, setSyncFor, ensureCircles]
+    [mergeCloudIntoLocal, setSyncFor, ensureCircles, noteDbError, noteDbOk]
   );
 
   linkAccountRef.current = linkAccount;
 
+  /** Włącza/wyłącza synchronizację z chmurą dla konta (wyłączona = wszystko działa tylko na tym urządzeniu). */
+  const setCloudSync = useCallback(
+    (profileId: string, enabled: boolean) => {
+      setStore((prev) => ({
+        ...prev,
+        profiles: prev.profiles.map((x) => (x.id === profileId ? { ...x, cloudOptOut: enabled ? undefined : true } : x)),
+      }));
+      if (enabled) {
+        window.setTimeout(() => void linkAccountRef.current(profileId), 50);
+      } else {
+        window.clearTimeout(linkRetryTimersRef.current.get(profileId));
+        pendingPasswordsRef.current.delete(profileId);
+        setSyncFor(profileId, { state: 'local' });
+      }
+    },
+    [setSyncFor]
+  );
+
   /** „Spróbuj teraz”: natychmiastowa ponowna próba połączenia i wysyłki. */
   const retrySync = useCallback((profileId: string) => {
+    dbPauseUntilRef.current = 0; // jedna próba „na żądanie”, nawet w czasie przerwy
     linkFailuresRef.current.delete(profileId);
     pushFailuresRef.current.delete(profileId);
     pushedAccountFpRef.current.delete(profileId);
@@ -1385,6 +1476,10 @@ export function useAppStore() {
         // Odstęp między zapisami: zwykle 5 s; gdy ktoś gra bardzo dużo serii pod rząd
         // (>20 zapisów w 10 min) — zwalniamy do 1 zapisu na minutę, ale NIGDY nie wstrzymujemy.
         // Zmiany i tak się łączą, więc nic nie ginie.
+        if (dbPauseUntilRef.current > now) {
+          retryIn = Math.max(retryIn, dbPauseUntilRef.current - now + 1000);
+          continue;
+        }
         const log = (pushLogRef.current.get(p.id) ?? []).filter((t) => now - t < 10 * 60_000);
         const minGap = log.length >= 20 ? 60_000 : 5000;
         const last = lastPushAtRef.current.get(p.id) ?? 0;
@@ -1411,14 +1506,16 @@ export function useAppStore() {
             .then(() => {
               window.clearTimeout(slowTimer);
               pushFailuresRef.current.delete(pid);
+              noteDbOk();
               if (accountSyncRef.current[pid]?.unsent) setSyncFor(pid, { state: 'synced' });
             })
             .catch((err) => {
               window.clearTimeout(slowTimer);
               pushedAccountFpRef.current.delete(pid);
+              noteDbError(err);
               const n = pushFailuresRef.current.get(pid) ?? 0;
               pushFailuresRef.current.set(pid, n + 1);
-              const delay = RETRY_STEPS_MS[Math.min(n, RETRY_STEPS_MS.length - 1)];
+              const delay = Math.round(RETRY_STEPS_MS[Math.min(n, RETRY_STEPS_MS.length - 1)] * (0.75 + Math.random() * 0.5));
               setSyncFor(pid, {
                 state: 'synced',
                 unsent: true,
@@ -1438,13 +1535,16 @@ export function useAppStore() {
         ].join('|');
         if (cardFpRef.current.get(p.id) !== cardFp) {
           cardFpRef.current.set(p.id, cardFp);
-          void publishCircleCards(p).catch(() => cardFpRef.current.delete(p.id));
+          void publishCircleCards(p).catch((err) => {
+            cardFpRef.current.delete(p.id);
+            noteDbError(err);
+          });
         }
       }
       if (retryIn > 0) window.setTimeout(() => setPushTick((t) => t + 1), retryIn + 50);
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [store.profiles, store.ownedProfileIds, accountSync, pushTick, setSyncFor]);
+  }, [store.profiles, store.ownedProfileIds, accountSync, pushTick, setSyncFor, noteDbError, noteDbOk]);
 
   // Ponawianie kont, których nie udało się połączyć (brak sieci / limit bazy) — co 2 min.
   useEffect(() => {
@@ -1479,7 +1579,8 @@ export function useAppStore() {
     async (
       name: string,
       avatarId: string,
-      password: string
+      password: string,
+      localOnly = false
     ): Promise<{ ok: boolean; error?: string }> => {
       const trimmedName = name.trim();
       const pwd = password.trim();
@@ -1497,16 +1598,15 @@ export function useAppStore() {
         login,
         passwordHash: hashAccountPassword(pwd, base.id),
         circles: [],
+        ...(localOnly ? { cloudOptOut: true } : {}),
       };
 
       let finalProfile: UserProfile = created;
       let syncState: AccountSyncState = { state: 'synced' };
       try {
-        const res = await withTimeout(
-          registerOrSignInAccount(created, pwd),
-          20000,
-          'Baza nie odpowiada.'
-        );
+        if (localOnly) throw Object.assign(new Error('local-only'), { code: 'local-only' });
+        // Krótko czekamy na bazę (by wykryć zajęty login); gdy nie odpowiada — konto działa lokalnie od razu.
+        const res = await withTimeout(registerOrSignInAccount(created, pwd), 6000, 'Baza nie odpowiada.');
         finalProfile = res.cloudProfile
           ? {
               ...res.cloudProfile,
@@ -1521,6 +1621,9 @@ export function useAppStore() {
         if (code === 'login-taken' || code === 'auth/email-already-in-use') {
           return { ok: false, error: describeAccountError(err) };
         }
+        if (code === 'local-only') {
+          syncState = { state: 'local' };
+        } else {
         // Brak internetu: konto działa lokalnie i zsynchronizuje się później.
         pendingPasswordsRef.current.set(created.id, pwd);
         syncState = {
@@ -1528,6 +1631,7 @@ export function useAppStore() {
           message: 'Brak połączenia — konto działa na tym urządzeniu i połączy się z chmurą samo, gdy wróci internet.',
         };
         window.setTimeout(() => void linkAccountRef.current(created.id), RETRY_STEPS_MS[0]);
+        }
       }
 
       setStore((prev) => ({
@@ -1547,12 +1651,16 @@ export function useAppStore() {
 
   /** „Mam już konto”: login + hasło — najpierw to urządzenie, potem chmura. */
   const loginToCloudAccount = useCallback(
-    async (loginInput: string, passwordInput: string): Promise<{ ok: boolean; error?: string }> => {
+    async (
+      loginInput: string,
+      passwordInput: string,
+      opts?: { cloudOnly?: boolean }
+    ): Promise<{ ok: boolean; error?: string }> => {
       const login = normalizeLogin(loginInput);
       const pwd = passwordInput.trim();
       if (!loginInput.trim()) return { ok: false, error: 'Wpisz swój login.' };
 
-      const local = storeRef.current.profiles.find((p) => profileLogin(p) === login);
+      const local = opts?.cloudOnly ? undefined : storeRef.current.profiles.find((p) => profileLogin(p) === login);
       if (local && hasAccountPassword(local) && verifyAccountCredentials(local, pwd, loginInput)) {
         setStore((prev) => ({
           ...prev,
@@ -1562,12 +1670,23 @@ export function useAppStore() {
             : [...prev.ownedProfileIds, local.id],
           hasSelectedProfile: true,
         }));
-        const linked = await linkAccount(local.id, pwd);
-        if (linked !== 'needs-password') {
-          void logLoginEvent(loginInput, true, 'ok');
-          return { ok: true };
+        void logLoginEvent(loginInput, true, 'ok');
+        // Konto jest na tym urządzeniu — wchodzimy od razu, bez czekania na bazę.
+        // Połączenie z chmurą dzieje się w tle; gdy hasło w chmurze jest inne, próbujemy zwykłego logowania.
+        if (!local.cloudOptOut) {
+          void (async () => {
+            const linked = await linkAccountRef.current(local.id, pwd);
+            if (linked !== 'needs-password') return;
+            const r = await loginToCloudAccountRef.current(loginInput, pwd, { cloudOnly: true });
+            if (!r.ok) {
+              setSyncFor(local.id, {
+                state: 'needs-password',
+                message: r.error ?? 'Wpisz hasło, aby wznowić synchronizację.',
+              });
+            }
+          })();
         }
-        // Hasło na tym urządzeniu jest nieaktualne względem chmury — spróbuj logowania z chmury.
+        return { ok: true };
       }
       if (!pwd) return { ok: false, error: 'Wpisz hasło lub PIN.' };
 
@@ -1864,6 +1983,8 @@ export function useAppStore() {
     legacyGoogleSync: LEGACY_GOOGLE_SYNC_ENABLED,
     accountSync,
     retrySync,
+    dbIssue,
+    setCloudSync,
     logoutAccount,
     loginToCloudAccount,
     createAccountWithCloud,
