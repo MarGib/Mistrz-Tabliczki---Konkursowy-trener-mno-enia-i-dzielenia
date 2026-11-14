@@ -1,60 +1,43 @@
 import { useEffect, useState } from 'react';
 import { Download, Share, X } from 'lucide-react';
 import { HelpButton } from '../help/HelpButton';
+import { useHelp } from '../help/HelpContext';
+import {
+  getInstallPrompt,
+  isIos,
+  isStandalone,
+  onInstallPromptChange,
+  runInstallPrompt,
+} from '../pwa';
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+const DISMISS_KEY = 'mt_install_dismissed_until';
+
+function useInstallPrompt() {
+  const [, force] = useState(0);
+  useEffect(() => onInstallPromptChange(() => force((x) => x + 1)), []);
+  return getInstallPrompt();
 }
 
-const DISMISS_KEY = 'mt_install_dismissed';
-
-function isStandalone(): boolean {
-  return (
-    window.matchMedia?.('(display-mode: standalone)').matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
-}
-
-function isIos(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-/** Proponuje dodanie aplikacji do ekranu głównego (Android: systemowy przycisk, iPhone: krótka instrukcja). */
+/** Baner „Zainstaluj aplikację” — po zamknięciu wraca za 7 dni. */
 export function InstallBanner() {
-  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showIos, setShowIos] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
+  const prompt = useInstallPrompt();
+  const [hiddenUntil, setHiddenUntil] = useState(() => {
     try {
-      return window.localStorage.getItem(DISMISS_KEY) === '1';
+      return Number(window.localStorage.getItem(DISMISS_KEY) ?? 0);
     } catch {
-      return false;
+      return 0;
     }
   });
 
-  useEffect(() => {
-    if (isStandalone()) return;
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferred(e as BeforeInstallPromptEvent);
-    };
-    window.addEventListener('beforeinstallprompt', onPrompt);
-    const onInstalled = () => setDeferred(null);
-    window.addEventListener('appinstalled', onInstalled);
-    if (isIos()) setShowIos(true);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onPrompt);
-      window.removeEventListener('appinstalled', onInstalled);
-    };
-  }, []);
-
-  if (dismissed || isStandalone() || (!deferred && !showIos)) return null;
+  if (isStandalone() || Date.now() < hiddenUntil) return null;
+  const ios = isIos();
+  if (!prompt && !ios) return null;
 
   const dismiss = () => {
-    setDismissed(true);
+    const until = Date.now() + 7 * 24 * 3600 * 1000;
+    setHiddenUntil(until);
     try {
-      window.localStorage.setItem(DISMISS_KEY, '1');
+      window.localStorage.setItem(DISMISS_KEY, String(until));
     } catch {
       // ignore
     }
@@ -66,7 +49,7 @@ export function InstallBanner() {
         <img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="" className="w-10 h-10 rounded-xl shrink-0" />
         <div className="flex-1 min-w-0 text-sm text-[var(--th-text)]">
           <p className="font-bold">Zainstaluj Mistrza Tabliczki</p>
-          {deferred ? (
+          {prompt ? (
             <p className="text-xs text-[var(--th-text-muted)]">Ikonka na ekranie głównym, otwiera się jak aplikacja.</p>
           ) : (
             <p className="text-xs text-[var(--th-text-muted)]">
@@ -75,14 +58,10 @@ export function InstallBanner() {
           )}
         </div>
         <HelpButton section="install" label="Instalacja" />
-        {deferred && (
+        {prompt && (
           <button
             type="button"
-            onClick={async () => {
-              await deferred.prompt();
-              await deferred.userChoice.catch(() => null);
-              setDeferred(null);
-            }}
+            onClick={() => void runInstallPrompt()}
             className="min-h-[42px] px-4 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-sm font-bold inline-flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <Download className="w-4 h-4" aria-hidden="true" />
@@ -92,12 +71,36 @@ export function InstallBanner() {
         <button
           type="button"
           onClick={dismiss}
-          aria-label="Nie pokazuj więcej"
+          aria-label="Ukryj na 7 dni"
           className="min-h-[42px] min-w-[42px] rounded-xl text-[var(--th-text-muted)] flex items-center justify-center cursor-pointer shrink-0"
         >
           <X className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
     </div>
+  );
+}
+
+/** Stały przycisk w zakładce Konto: instaluje albo pokazuje instrukcję dla danego telefonu. */
+export function InstallAppButton() {
+  const prompt = useInstallPrompt();
+  const { openHelp } = useHelp();
+  if (isStandalone()) {
+    return (
+      <p className="text-xs font-semibold text-emerald-600" data-testid="install-status">
+        ✓ Aplikacja jest zainstalowana na tym urządzeniu.
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      data-testid="install-app-btn"
+      onClick={() => (prompt ? void runInstallPrompt() : openHelp('install'))}
+      className="w-full min-h-[44px] px-4 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] text-sm font-bold inline-flex items-center justify-center gap-2 cursor-pointer hover:border-[var(--th-primary)]"
+    >
+      <Download className="w-4 h-4" aria-hidden="true" />
+      Zainstaluj aplikację na tym urządzeniu
+    </button>
   );
 }

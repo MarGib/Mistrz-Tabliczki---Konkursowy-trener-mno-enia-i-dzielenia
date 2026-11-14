@@ -423,6 +423,7 @@ export async function pushProfileToCloud(
   uid: string,
   profile: UserProfile
 ): Promise<void> {
+  if (!LEGACY_GOOGLE_SYNC_ENABLED) return;
   const safeId = sanitizeFirestoreId(profile.id);
   const path = `groups/${groupId}/profiles/${safeId}`;
   try {
@@ -473,6 +474,7 @@ export async function pushNotificationsFeedToCloud(
   uid: string,
   items: FamilyNotification[]
 ): Promise<void> {
+  if (!LEGACY_GOOGLE_SYNC_ENABLED) return;
   const path = `groups/${groupId}/feed/latest`;
   try {
     await setDoc(doc(db, 'groups', groupId, 'feed', 'latest'), {
@@ -622,6 +624,7 @@ export async function fetchGlobalSchoolDirectory(): Promise<SchoolDirectoryEntry
 export async function pushGlobalSchoolDirectory(
   entries: SchoolDirectoryEntry[]
 ): Promise<void> {
+  if (!LEGACY_GOOGLE_SYNC_ENABLED) return;
   if (!auth.currentUser || entries.length === 0) return;
   const dirRef = doc(db, 'schoolDirectory', 'global');
   try {
@@ -694,6 +697,13 @@ async function upsertArenaBoardPlayers(
 }
 
 const PUBLIC_ARENA_DISABLED = true;
+
+/**
+ * Stara synchronizacja przez konto Google (workspace grupy, katalog szkół, feed powiadomień).
+ * Wyłączona: zastępują ją konta login + hasło (accountCloud.ts). Generowała tysiące zapisów
+ * i wyczerpywała dzienny limit Firestore.
+ */
+export const LEGACY_GOOGLE_SYNC_ENABLED = false;
 
 export async function syncProfilesToArenaBoards(
   uid: string,

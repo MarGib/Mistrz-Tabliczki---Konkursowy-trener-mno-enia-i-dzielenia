@@ -43,6 +43,8 @@ import type {
 } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 import { PasswordInput } from './PasswordInput';
+import { InstallAppButton } from './InstallBanner';
+import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { AvatarStudio } from './AvatarStudio';
 
 interface ProfileSettingsViewProps {
@@ -358,6 +360,7 @@ export function ProfileSettingsView({
               <HelpButton section="logout" label="Wylogowanie" />
             </div>
           </div>
+          <InstallAppButton />
           {!activeProfile.cloudUid && (
             <p className="text-[11px] text-[var(--th-text-muted)] -mt-2">
               To konto nie jest jeszcze w chmurze — „Wyloguj” wróci do wyboru kont, a wyniki zostaną na tym urządzeniu.
@@ -783,7 +786,7 @@ export function ProfileSettingsView({
           </div>
           {/* Cloud Sync & Group / Class Code */}
           <details
-            className="pt-4 border-t border-[var(--th-border)] space-y-3"
+            className={`pt-4 border-t border-[var(--th-border)] space-y-3 ${LEGACY_GOOGLE_SYNC_ENABLED ? '' : 'hidden'}`}
             data-testid="cloud-sync-card"
           >
             <summary className="flex items-center justify-between gap-2 cursor-pointer min-h-[40px]">

@@ -134,10 +134,16 @@ export function describeAccountError(err: unknown): string {
   if (code === 'auth/network-request-failed' || code === 'unavailable') {
     return 'Brak połączenia z internetem. Wyniki zapiszą się lokalnie i zsynchronizują później.';
   }
+  if (code === 'resource-exhausted') {
+    return 'Baza wyników jest dziś przeciążona. Wyniki zapisują się na tym urządzeniu i wyślą się automatycznie później.';
+  }
   if (code === 'permission-denied') {
     return 'Brak uprawnień do tej operacji.';
   }
   const msg = err instanceof Error ? err.message : String(err ?? '');
+  if (/nie odpowiada/i.test(msg)) {
+    return 'Baza chwilowo nie przyjmuje zapisów. Wyniki zostają na tym urządzeniu i wyślą się automatycznie.';
+  }
   return msg || 'Nie udało się połączyć z bazą.';
 }
 
@@ -198,15 +204,14 @@ export async function registerOrSignInAccount(
 export async function signInAccountAndFetch(
   loginInput: string,
   password: string
-): Promise<{ uid: string; profile: UserProfile }> {
+): Promise<{ uid: string; profile: UserProfile | null }> {
   const login = normalizeLogin(loginInput);
   const { auth, db } = getHandle(login);
   const cred = await signInWithEmailAndPassword(auth, loginToEmail(login), toFirebasePassword(login, password));
   const snap = await getDoc(doc(db, 'accounts', cred.user.uid));
-  if (!snap.exists()) {
-    throw new Error('Konto istnieje, ale nie ma jeszcze zapisanych wyników.');
-  }
-  return { uid: cred.user.uid, profile: snap.data().profile as UserProfile };
+  // Konto istnieje, ale profil nie zdążył się zapisać (np. przy przeciążonej bazie) — zaczniemy od nowa,
+  // a wyniki z pierwszego urządzenia dołączą się przy jego najbliższej synchronizacji.
+  return { uid: cred.user.uid, profile: snap.exists() ? (snap.data().profile as UserProfile) : null };
 }
 
 export async function pushAccountProfile(profile: UserProfile): Promise<void> {

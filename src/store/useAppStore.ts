@@ -37,6 +37,7 @@ import {
   pushGroupProfileIds,
   pushNotificationsFeedToCloud,
   pushProfileToCloud,
+  LEGACY_GOOGLE_SYNC_ENABLED,
   signInWithGoogleCloud,
   signOutCloud,
   subscribeToArenaBoard,
@@ -366,6 +367,7 @@ export function useAppStore() {
 
   // Listen to Firebase Auth state & sync user workspace + non-PII school/class arena boards
   useEffect(() => {
+    if (!LEGACY_GOOGLE_SYNC_ENABLED) return;
     let unsubCloud: (() => void) | null = null;
     let unsubGlobalArena: (() => void) | null = null;
     let cancelled = false;
@@ -514,7 +516,7 @@ export function useAppStore() {
   // Subscribe to the active user's school-specific arena board so whole school & classes appear live
   useEffect(() => {
     const school = activeProfile.schoolName?.trim();
-    if (!school || cloudStatus !== 'synced') return;
+    if (!LEGACY_GOOGLE_SYNC_ENABLED || !school || cloudStatus !== 'synced') return;
     const schoolBoardId = getSchoolArenaBoardId(school);
     const unsubSchoolBoard = subscribeToArenaBoard(schoolBoardId, (players) => {
       setArenaPlayers((prev) => {
@@ -1202,7 +1204,7 @@ export function useAppStore() {
         setSyncFor(profileId, { state: 'synced' });
       } catch (err) {
         const code = (err as { code?: string })?.code ?? '';
-        if (code === 'auth/network-request-failed') {
+        if (code !== 'login-taken' && !code.startsWith('auth/invalid') && code !== 'auth/wrong-password') {
           pendingPasswordsRef.current.set(profileId, password);
         }
         setSyncFor(profileId, { state: 'error', message: describeAccountError(err) });
@@ -1260,21 +1262,69 @@ export function useAppStore() {
     };
   }, [ownedCloudKey, setSyncFor]);
 
-  // Wysyłanie zmian (wyniki, ustawienia, grupy) do chmury z małym opóźnieniem.
+  // Wysyłanie zmian (wyniki, ustawienia, grupy) do chmury — oszczędnie:
+  //  * najwyżej jeden zapis konta na 5 s (kolejne zmiany są łączone),
+  //  * karta wyników w grupach tylko, gdy zmieniły się wyniki lub widoczność,
+  //  * bezpiecznik: >20 zapisów jednego konta w 10 min = wstrzymanie (ochrona dziennego limitu bazy).
+  const lastPushAtRef = useRef<Map<string, number>>(new Map());
+  const pushLogRef = useRef<Map<string, number[]>>(new Map());
+  const cardFpRef = useRef<Map<string, string>>(new Map());
+  const [pushTick, setPushTick] = useState(0);
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const now = Date.now();
+      let retryIn = 0;
       for (const p of store.profiles) {
         if (!p.cloudUid || !store.ownedProfileIds.includes(p.id)) continue;
         if (accountSync[p.id]?.state !== 'synced') continue;
         const fp = accountFingerprint(p);
         if (pushedAccountFpRef.current.get(p.id) === fp) continue;
+        const last = lastPushAtRef.current.get(p.id) ?? 0;
+        if (now - last < 5000) {
+          retryIn = Math.max(retryIn, 5000 - (now - last));
+          continue;
+        }
+        const log = (pushLogRef.current.get(p.id) ?? []).filter((t) => now - t < 10 * 60_000);
+        if (log.length >= 20) {
+          console.warn('[Mistrz Tabliczki] Wstrzymano synchronizację — zbyt wiele zapisów.');
+          setSyncFor(p.id, {
+            state: 'error',
+            message: 'Synchronizacja wstrzymana na chwilę (za dużo zmian naraz). Odśwież stronę za kilka minut.',
+          });
+          continue;
+        }
+        log.push(now);
+        pushLogRef.current.set(p.id, log);
+        lastPushAtRef.current.set(p.id, now);
         pushedAccountFpRef.current.set(p.id, fp);
         void pushAccountProfile(p).catch(() => pushedAccountFpRef.current.delete(p.id));
-        void publishCircleCards(p).catch(() => {});
+        const cardFp = [
+          p.xp,
+          p.sessions?.length ?? 0,
+          p.streakDays,
+          p.name,
+          p.avatarId,
+          (p.circles ?? []).map((c) => `${c.id}:${c.share ? 1 : 0}`).join(','),
+        ].join('|');
+        if (cardFpRef.current.get(p.id) !== cardFp) {
+          cardFpRef.current.set(p.id, cardFp);
+          void publishCircleCards(p).catch(() => cardFpRef.current.delete(p.id));
+        }
       }
-    }, 1200);
+      if (retryIn > 0) window.setTimeout(() => setPushTick((t) => t + 1), retryIn + 50);
+    }, 1500);
     return () => window.clearTimeout(timer);
-  }, [store.profiles, store.ownedProfileIds, accountSync]);
+  }, [store.profiles, store.ownedProfileIds, accountSync, pushTick, setSyncFor]);
+
+  // Ponawianie kont, których nie udało się połączyć (brak sieci / limit bazy) — co 2 min.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      for (const [pid, pwd] of pendingPasswordsRef.current.entries()) {
+        void linkAccountRef.current(pid, pwd);
+      }
+    }, 120_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Na żywo: zmiany tego samego konta z innego urządzenia.
   const activeSynced =
@@ -1391,7 +1441,12 @@ export function useAppStore() {
           20000,
           'Baza nie odpowiada. Sprawdź internet.'
         );
-        const cloud = res.profile;
+        const cloud: UserProfile =
+          res.profile ?? {
+            ...createFreshProfileForCloud(loginInput.trim(), 'owl', Date.now()),
+            login,
+            circles: [],
+          };
         setStore((prev) => {
           const existing = prev.profiles.find((p) => p.id === cloud.id);
           const merged: UserProfile = {
@@ -1644,6 +1699,7 @@ export function useAppStore() {
     disconnectGoogleCloud,
     joinGroupCode,
     resetLocalData,
+    legacyGoogleSync: LEGACY_GOOGLE_SYNC_ENABLED,
     accountSync,
     logoutAccount,
     loginToCloudAccount,

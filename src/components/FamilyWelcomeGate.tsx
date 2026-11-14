@@ -25,6 +25,7 @@ import type { CloudSyncStatus } from '../store/useAppStore';
 import type { DeviceProfile, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 import { PasswordInput } from './PasswordInput';
+import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { readPendingInvite } from './InviteCard';
 
 interface FamilyWelcomeGateProps {
@@ -579,7 +580,7 @@ export function FamilyWelcomeGate({
             {/* Tab C: Existing Account (Google Cloud Sync or Hidden Login + Password) */}
             {activeMode === 'existing' && (
               <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 flex flex-col-reverse gap-4 shadow-sm">
-                <div className="space-y-2 pt-4 border-t border-[var(--th-border)]">
+                <div className={`space-y-2 pt-4 border-t border-[var(--th-border)] ${LEGACY_GOOGLE_SYNC_ENABLED ? '' : 'hidden'}`}>
                   <div className="flex items-center gap-2">
                     <Cloud className="w-5 h-5 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
                     <h2 className="font-display text-base sm:text-lg font-extrabold text-[var(--th-text)]">

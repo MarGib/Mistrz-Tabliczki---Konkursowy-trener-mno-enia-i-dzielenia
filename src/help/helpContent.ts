@@ -149,8 +149,10 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: 'Aplikacja na telefonie',
     lead: 'Mistrza Tabliczki można dodać do ekranu głównego — otwiera się wtedy jak zwykła aplikacja.',
     steps: [
-      'Android (Chrome): menu ⋮ → „Zainstaluj aplikację” lub „Dodaj do ekranu głównego”.',
-      'iPhone (Safari): przycisk Udostępnij → „Do ekranu początkowego”.',
+      'Najprościej: zakładka Konto → „Zainstaluj aplikację na tym urządzeniu”.',
+      'Android (Chrome): jeśli przycisku nie ma, menu ⋮ → „Zainstaluj aplikację” lub „Dodaj do ekranu głównego”.',
+      'iPhone/iPad: otwórz stronę w Safari → przycisk Udostępnij → „Do ekranu początkowego”. (W Chrome na iPhonie instalacja działa tylko przez Safari.)',
+      'Otwieranie w Messengerze, Facebooku lub innej aplikacji nie pozwala instalować — wybierz „Otwórz w przeglądarce”.',
     ],
   },
 ];
