@@ -31,17 +31,6 @@ jobs:
       - name: Zainstaluj zależności
         run: npm install --no-audit --no-fund
 
-      - name: Skonfiguruj Firebase (sekret lub plik repozytorium)
-        env:
-          FIREBASE_APPLET_CONFIG: ${{ secrets.FIREBASE_APPLET_CONFIG }}
-        run: |
-          if [ -n "$FIREBASE_APPLET_CONFIG" ]; then
-            printf '%s' "$FIREBASE_APPLET_CONFIG" > firebase-applet-config.json
-          elif [ ! -f firebase-applet-config.json ]; then
-            echo "Brak firebase-applet-config.json oraz sekretu FIREBASE_APPLET_CONFIG." >&2
-            exit 1
-          fi
-
       - name: Sprawdź kod i testy (błąd zatrzymuje publikację)
         run: npm run check
 

@@ -44,7 +44,6 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-accounts-config.json';
 import { protectApp } from './appCheck';
-import legacyConfig from '../../firebase-applet-config.json';
 import type { CircleMembership, UserProfile } from '../types/math';
 import { hashAccountPassword, normalizeLogin } from './accountSecurity';
 import { type SessionLite, groupByMonth } from './history';
@@ -103,34 +102,12 @@ function makeDb(app: FirebaseApp): Firestore {
   }
 }
 
-/**
- * Stary projekt (AI Studio, wspólny limit zapisów). Używany wyłącznie do ODCZYTU kont,
- * które nie zdążyły jeszcze przejść do nowej bazy (logowanie na nowym urządzeniu).
- */
-function getLegacyHandle(login: string): AccountHandle {
-  const name = `legacy-${normalizeLogin(login)}`;
-  const cached = handles.get(name);
-  if (cached) return cached;
-  const app = getApps().some((a) => a.name === name) ? getApp(name) : initializeApp(legacyConfig, name);
-  const handle: AccountHandle = {
-    app,
-    auth: getAuth(app),
-    db: getFirestore(app, legacyConfig.firestoreDatabaseId),
-  };
-  handles.set(name, handle);
-  return handle;
-}
-
 /** Techniczny e-mail konta: dziecko widzi tylko swój login. */
 export function loginToEmail(login: string): string {
   const local = normalizeLogin(login).replace(/\./g, '_').slice(0, 40);
   return `u-${local}@${EMAIL_DOMAIN}`;
 }
 
-/** Hasło techniczne STAREGO projektu (tylko do odczytu starych kont). */
-function toLegacyFirebasePassword(login: string, password: string): string {
-  return `mt#${password}#${normalizeLogin(login)}`;
-}
 
 /**
  * Hasło techniczne nowej bazy — wyprowadzone ze skrótu hasła, który urządzenie i tak przechowuje.
@@ -329,30 +306,8 @@ export async function signInAccountAndFetch(
     }
   }
 
-  // Konto jeszcze w starej bazie — odczytaj i przenieś.
-  const legacy = getLegacyHandle(login);
-  let legacyProfile: UserProfile | null = null;
-  try {
-    const cred = await signInWithEmailAndPassword(
-      legacy.auth,
-      loginToEmail(login),
-      toLegacyFirebasePassword(login, password)
-    );
-    const snap = await getDoc(doc(legacy.db, 'accounts', cred.user.uid)).catch(() => null);
-    legacyProfile = snap?.exists() ? (snap.data().profile as UserProfile) : null;
-    await signOut(legacy.auth).catch(() => {});
-  } catch (err) {
-    const code = errorCode(err);
-    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/invalid-login-credentials' || code === 'auth/user-not-found') {
-      throw invalidCredentials();
-    }
-    throw err;
-  }
-  if (!legacyProfile) throw invalidCredentials();
-  const passwordHash = hashAccountPassword(password, legacyProfile.id);
-  const migrated: UserProfile = { ...legacyProfile, login, passwordHash };
-  const res = await ensureAccount(migrated);
-  return { uid: res.uid, profile: res.cloudProfile ?? legacyProfile, profileId: legacyProfile.id, passwordHash };
+  // Brak loginu w bazie. (Stara baza AI Studio została wyłączona po migracji wszystkich kont.)
+  throw invalidCredentials();
 }
 
 export async function pushAccountProfile(profile: UserProfile): Promise<void> {

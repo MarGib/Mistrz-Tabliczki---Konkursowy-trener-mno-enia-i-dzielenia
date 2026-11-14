@@ -22,7 +22,6 @@ import {
   noteAccountCreatedHere,
   noteLoginFailure,
 } from '../engine/integrity';
-import { onAuthStateChanged } from 'firebase/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ALL_BADGES,
@@ -103,7 +102,7 @@ import {
 } from '../engine/schoolDirectory';
 import { computeTournamentMedal, updateFactMemory } from '../engine/spacedRepetition';
 import { createFreshProfile as createFreshProfileForCloud } from '../data/curriculum';
-import { auth, formatFirebaseError } from '../firebase';
+import { formatFirebaseError } from '../firebase';
 import type {
   AppSettings,
   AvatarSpec,
@@ -442,145 +441,7 @@ export function useAppStore() {
     };
   }, []);
 
-  // Listen to Firebase Auth state & sync user workspace + non-PII school/class arena boards
-  useEffect(() => {
-    if (!LEGACY_GOOGLE_SYNC_ENABLED) return;
-    let unsubCloud: (() => void) | null = null;
-    let unsubGlobalArena: (() => void) | null = null;
-    let cancelled = false;
-
-    const unsubAuth = onAuthStateChanged(auth, async (user) => {
-      if (unsubCloud) {
-        unsubCloud();
-        unsubCloud = null;
-      }
-      if (unsubGlobalArena) {
-        unsubGlobalArena();
-        unsubGlobalArena = null;
-      }
-
-      if (!user) {
-        setCloudMeta(null);
-        setCloudStatus('offline');
-        return;
-      }
-
-      setCloudStatus('connecting');
-      setCloudError(null);
-
-      try {
-        const snapshot = storeRef.current;
-        const meta = await withTimeout(
-          ensureCloudGroupForUser(user, snapshot.profiles, snapshot.activeProfileId),
-          25000,
-          'Baza nie odpowiada. Sprawdź internet i spróbuj połączyć ponownie.'
-        );
-        if (cancelled) return;
-
-        setCloudMeta(meta);
-        cloudMetaRef.current = meta;
-        setCloudStatus('synced');
-
-        if (schoolDirectoryRef.current.length > 0) {
-          void pushGlobalSchoolDirectory(schoolDirectoryRef.current);
-        }
-        if (snapshot.profiles.length > 0) {
-          void syncProfilesToArenaBoards(user.uid, snapshot.profiles);
-        }
-
-        unsubGlobalArena = subscribeToArenaBoard('global', (players) => {
-          setArenaPlayers((prev) => {
-            const byId = new Map(prev.map((p) => [p.profileId, p]));
-            for (const p of players) {
-              byId.set(p.profileId, p);
-            }
-            return Array.from(byId.values());
-          });
-        });
-
-        unsubCloud = subscribeToGroupCloud({
-          groupId: meta.groupId,
-          onProfilesSnapshot: (cloudProfiles) => {
-            const cloudById = new Map(cloudProfiles.map((p) => [p.id, p]));
-            let mergedForSync: UserProfile[] = [];
-
-            setStore((prev) => {
-              const merged = mergeProfiles(prev.profiles, cloudProfiles);
-              mergedForSync = merged;
-              const ownedSet = new Set(prev.ownedProfileIds);
-              for (const prof of merged) {
-                if (prof.ownerUid === user.uid) {
-                  ownedSet.add(prof.id);
-                }
-              }
-              if (ownedSet.size === 0 && merged.length === 1) {
-                ownedSet.add(merged[0].id);
-              }
-              const nextActive = merged.some((p) => p.id === prev.activeProfileId)
-                ? prev.activeProfileId
-                : Array.from(ownedSet)[0] ?? merged[0]?.id ?? '';
-
-              return {
-                ...prev,
-                activeProfileId: nextActive,
-                profiles: merged,
-                ownedProfileIds: Array.from(ownedSet).filter((id) =>
-                  merged.some((p) => p.id === id)
-                ),
-              };
-            });
-
-            // Push back any local progress, accounts, or local passwordHash not yet on cloud
-            for (const prof of mergedForSync) {
-              const cloudCopy = cloudById.get(prof.id);
-              if (doesProfileNeedCloudPush(prof, cloudCopy)) {
-                const fp = `${prof.xp}:${prof.sessions.length}:${prof.passwordHash ?? ''}:${prof.schoolName ?? ''}:${prof.className ?? ''}`;
-                if (pushedFingerprintRef.current.get(prof.id) !== fp) {
-                  pushedFingerprintRef.current.set(prof.id, fp);
-                  void pushProfileToCloud(meta.groupId, user.uid, {
-                    ...prof,
-                    ownerUid: prof.ownerUid || user.uid,
-                  }).catch(() => {});
-                }
-              }
-            }
-
-            if (mergedForSync.length > 0) {
-              void syncProfilesToArenaBoards(user.uid, mergedForSync);
-              const nextDir = mergeSchoolDirectories(
-                [schoolDirectoryRef.current],
-                mergedForSync
-              );
-              if (nextDir.length > 0) {
-                void pushGlobalSchoolDirectory(nextDir);
-              }
-            }
-          },
-          onFeedSnapshot: (cloudNotifs) => {
-            setStore((prev) => ({
-              ...prev,
-              notifications: mergeNotifications(prev.notifications, cloudNotifs),
-            }));
-          },
-          onError: (err) => {
-            setCloudStatus('error');
-            setCloudError(formatFirebaseError(err));
-          },
-        });
-      } catch (err) {
-        if (cancelled) return;
-        setCloudStatus('error');
-        setCloudError(formatFirebaseError(err));
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubAuth();
-      if (unsubCloud) unsubCloud();
-      if (unsubGlobalArena) unsubGlobalArena();
-    };
-  }, [cloudSubVersion]);
+  // (Dawna synchronizacja przez Google i starą bazę AI Studio — usunięta 14.11.2026.)
 
   const activeProfile = useMemo(
     () =>
@@ -1222,48 +1083,7 @@ export function useAppStore() {
       if (cleaned.startsWith('G')) {
         return joinGroupRef.current(cleaned);
       }
-      const user = auth.currentUser;
-      if (!user) {
-        return {
-          ok: false,
-          error: 'Najpierw zaloguj się przez Google, aby dołączyć do grupy kodem.',
-        };
-      }
-      try {
-        const snapshot = storeRef.current;
-        const { meta, existingProfileIds } = await joinCloudGroupByCode(
-          user,
-          rawCode,
-          snapshot.activeProfileId || snapshot.ownedProfileIds[0] || ''
-        );
-
-        // Push local owned profiles into the joined group so classmates/schools see them in Stats
-        const ownedList = snapshot.profiles.filter((p) =>
-          snapshot.ownedProfileIds.includes(p.id)
-        );
-        for (const prof of ownedList) {
-          const tagged = { ...prof, ownerUid: user.uid };
-          await pushProfileToCloud(meta.groupId, meta.uid, tagged);
-        }
-        if (ownedList.length > 0) {
-          const allIds = Array.from(
-            new Set([...existingProfileIds, ...ownedList.map((p) => p.id)])
-          );
-          await pushGroupProfileIds(meta.groupId, allIds).catch(() => {});
-          void syncProfilesToArenaBoards(meta.uid, ownedList);
-        }
-
-        setCloudMeta(meta);
-        cloudMetaRef.current = meta;
-        setCloudStatus('synced');
-        setCloudSubVersion((v) => v + 1);
-        return { ok: true };
-      } catch (err) {
-        return {
-          ok: false,
-          error: formatFirebaseError(err),
-        };
-      }
+      return { ok: false, error: 'Kody grup zaczynają się od „G-”. Poproś o aktualny kod grupy.' };
     },
     []
   );

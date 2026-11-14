@@ -46,6 +46,7 @@ async def main():
                 await t.click(); await pg.wait_for_timeout(900)
                 await pg.screenshot(path=f'/tmp/smoke_{w}_{tab}.png')
             await ctx.set_offline(True); await pg.reload(); await pg.wait_for_timeout(2500)
+            await pg.screenshot(path=f'/tmp/smoke_{w}_offline.png')
             await pg.get_by_role('button', name='Statystyki').first.click(); await pg.wait_for_timeout(1200)
             off = await pg.locator('body').inner_text()
             print(w, 'offline statystyki:', 'OK' if 'Wczytywanie' not in off and len(off)>200 else 'BŁĄD')

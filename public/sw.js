@@ -24,7 +24,7 @@ self.addEventListener('install', (event) => {
         const fresh = [];
         for (const f of m.core) {
           const url = './' + f;
-          const old = /^assets\/.+-[\w-]{6,}\.\w+$/.test(f) ? await caches.match(url) : undefined;
+          const old = /^assets\/.+-[\w-]{6,}\.\w+$/.test(f) ? await caches.match(url, { ignoreVary: true }) : undefined;
           if (old) await c.put(url, old);
           else fresh.push(url);
         }
@@ -58,8 +58,8 @@ self.addEventListener('activate', (event) => {
         const c = await caches.open(CACHE);
         for (const f of m.extra) {
           const url = './' + f;
-          if (await c.match(url)) continue;
-          const prev = /^assets\/.+-[\w-]{6,}\.\w+$/.test(f) ? await caches.match(url) : undefined;
+          if (await c.match(url, { ignoreVary: true })) continue;
+          const prev = /^assets\/.+-[\w-]{6,}\.\w+$/.test(f) ? await caches.match(url, { ignoreVary: true }) : undefined;
           if (prev) {
             await c.put(url, prev);
             continue;
@@ -95,7 +95,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const c = await currentCache();
-        const cached = (await c.match('./index.html')) || (await c.match('./'));
+        const cached = (await c.match('./index.html', { ignoreVary: true })) || (await c.match('./', { ignoreVary: true }));
         const network = fetch(req, { cache: 'no-store' }).then((res) => {
           if (res.ok) c.put('./index.html', res.clone());
           return res;
@@ -113,7 +113,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
       const c = await currentCache();
-      const cached = await c.match(req, { ignoreSearch: true });
+      // ignoreVary: serwer (GitHub Pages, podgląd) wysyła „Vary: Accept-Encoding”, a żądania skryptów
+      // modułowych różnią się nagłówkami od tych z instalacji — bez tego bez internetu byłby pusty ekran.
+      const cached = await c.match(req, { ignoreSearch: true, ignoreVary: true });
       if (cached) return cached;
       try {
         const res = await fetch(req);
