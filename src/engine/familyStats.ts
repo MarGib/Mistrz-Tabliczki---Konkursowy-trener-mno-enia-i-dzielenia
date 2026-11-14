@@ -4,6 +4,8 @@ import type { MedalTier, UserProfile } from '../types/math';
 export interface MemberStanding {
   profileId: string;
   name: string;
+  schoolName?: string;
+  className?: string;
   avatarId: string;
   customAvatarSpec?: UserProfile['customAvatarSpec'];
   xp: number;
@@ -19,8 +21,21 @@ export interface MemberStanding {
   bestMedal: MedalTier;
 }
 
+export interface GroupCohortStanding {
+  key: string;
+  label: string;
+  sublabel?: string;
+  membersCount: number;
+  totalXp: number;
+  solvedTasks: number;
+  avgAccuracyPct: number;
+  avgTimeSec: number | null;
+}
+
 export interface FamilySummary {
   members: MemberStanding[];
+  classStandings: GroupCohortStanding[];
+  schoolStandings: GroupCohortStanding[];
   totalXp: number;
   totalSolvedTasks: number;
   totalSessions: number;
@@ -38,6 +53,78 @@ const MEDAL_RANK: Record<MedalTier, number> = {
   zloto: 3,
   puchar: 4,
 };
+
+function buildCohortStandings(
+  members: MemberStanding[],
+  mode: 'class' | 'school'
+): GroupCohortStanding[] {
+  const buckets = new Map<
+    string,
+    { label: string; sublabel?: string; items: MemberStanding[] }
+  >();
+
+  for (const m of members) {
+    const school = m.schoolName?.trim();
+    const cls = m.className?.trim();
+    if (mode === 'class') {
+      if (!cls) continue;
+      const key = `${(school || '').toLowerCase()}::${cls.toLowerCase()}`;
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.items.push(m);
+      } else {
+        buckets.set(key, {
+          label: `Klasa ${cls}`,
+          sublabel: school || undefined,
+          items: [m],
+        });
+      }
+    } else {
+      if (!school) continue;
+      const key = school.toLowerCase();
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.items.push(m);
+      } else {
+        buckets.set(key, {
+          label: school,
+          items: [m],
+        });
+      }
+    }
+  }
+
+  return Array.from(buckets.entries())
+    .map(([key, bucket]) => {
+      const totalXp = bucket.items.reduce((s, m) => s + m.xp, 0);
+      const solvedTasks = bucket.items.reduce((s, m) => s + m.solvedTasks, 0);
+      const active = bucket.items.filter((m) => m.solvedTasks > 0);
+      const avgAccuracyPct =
+        active.length > 0
+          ? Math.round(active.reduce((s, m) => s + m.accuracyPct, 0) / active.length)
+          : 0;
+      const timed = bucket.items.filter(
+        (m): m is MemberStanding & { avgTimeSec: number } => m.avgTimeSec !== null
+      );
+      const avgTimeSec =
+        timed.length > 0
+          ? Number(
+              (timed.reduce((s, m) => s + m.avgTimeSec, 0) / timed.length).toFixed(2)
+            )
+          : null;
+      return {
+        key,
+        label: bucket.label,
+        sublabel: bucket.sublabel,
+        membersCount: bucket.items.length,
+        totalXp,
+        solvedTasks,
+        avgAccuracyPct,
+        avgTimeSec,
+      };
+    })
+    .sort((a, b) => b.totalXp - a.totalXp);
+}
 
 export function computeFamilySummary(profiles: UserProfile[]): FamilySummary {
   const members: MemberStanding[] = profiles.map((p) => {
@@ -88,6 +175,8 @@ export function computeFamilySummary(profiles: UserProfile[]): FamilySummary {
     return {
       profileId: p.id,
       name: p.name,
+      schoolName: p.schoolName,
+      className: p.className,
       avatarId: p.avatarId,
       customAvatarSpec: p.customAvatarSpec,
       xp: p.xp,
@@ -105,6 +194,9 @@ export function computeFamilySummary(profiles: UserProfile[]): FamilySummary {
   });
 
   members.sort((a, b) => b.xp - a.xp);
+
+  const classStandings = buildCohortStandings(members, 'class');
+  const schoolStandings = buildCohortStandings(members, 'school');
 
   const totalXp = members.reduce((s, m) => s + m.xp, 0);
   const totalSolvedTasks = members.reduce((s, m) => s + m.solvedTasks, 0);
@@ -148,6 +240,8 @@ export function computeFamilySummary(profiles: UserProfile[]): FamilySummary {
 
   return {
     members,
+    classStandings,
+    schoolStandings,
     totalXp,
     totalSolvedTasks,
     totalSessions,

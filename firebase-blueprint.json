@@ -1,0 +1,331 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Private user record linking a verified Google account UID to its active competition group workspace and last selected user profile.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "activeProfileId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "groupId", "activeProfileId", "createdAt", "updatedAt"]
+    },
+    "GroupWorkspace": {
+      "title": "GroupWorkspace",
+      "description": "Shared competition group workspace (class, school, friends, or family) holding player user IDs and invite join code for cross-device sync.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "joinCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "profileIds": {
+          "type": "array",
+          "description": "Bounded list (max 50) of player user profile document IDs belonging to this group."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerUid", "joinCode", "profileIds", "createdAt", "updatedAt"]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "Membership record authorizing a Google UID to read and update its group's user profiles and notification feed.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner", "member"]
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "groupId", "role", "joinedAt"]
+    },
+    "JoinCode": {
+      "title": "JoinCode",
+      "description": "Lookup record mapping a short uppercase group/class join code to a group workspace ID.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["code", "groupId", "ownerUid", "createdAt"]
+    },
+    "UserProfileDoc": {
+      "title": "UserProfileDoc",
+      "description": "Synced player user profile including username, school, class, XP, streak, SM-2 memories, sessions, themes, avatar, and hashed credentials.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "schoolName": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "className": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "login": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "passwordHash": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "avatarId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "customAvatarSpec": {
+          "type": "object"
+        },
+        "xp": {
+          "type": "number"
+        },
+        "streakDays": {
+          "type": "number"
+        },
+        "lastActiveDate": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "unlockedStageIds": {
+          "type": "array"
+        },
+        "completedStageIds": {
+          "type": "array"
+        },
+        "earnedBadges": {
+          "type": "array"
+        },
+        "memories": {
+          "type": "object"
+        },
+        "sessions": {
+          "type": "array"
+        },
+        "tournamentBests": {
+          "type": "object"
+        },
+        "settings": {
+          "type": "object"
+        },
+        "activeThemeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "customThemes": {
+          "type": "array"
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "groupId",
+        "name",
+        "avatarId",
+        "xp",
+        "streakDays",
+        "lastActiveDate",
+        "unlockedStageIds",
+        "completedStageIds",
+        "earnedBadges",
+        "memories",
+        "sessions",
+        "tournamentBests",
+        "settings",
+        "activeThemeId",
+        "customThemes",
+        "updatedByUid",
+        "updatedAt"
+      ]
+    },
+    "GroupNotificationFeed": {
+      "title": "GroupNotificationFeed",
+      "description": "Bounded notification feed (max 40 alerts) notifying group/class members when someone beats an XP, speed, or tournament record.",
+      "type": "object",
+      "properties": {
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "items": {
+          "type": "array",
+          "description": "Bounded list (max 40) of notification objects."
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["groupId", "items", "updatedByUid", "updatedAt"]
+    },
+    "SchoolDirectory": {
+      "title": "SchoolDirectory",
+      "description": "Non-PII global directory of registered schools and their unique class labels so students pick existing schools and classes without creating duplicates.",
+      "type": "object",
+      "properties": {
+        "schools": {
+          "type": "array",
+          "description": "Bounded list (max 100) of school objects containing id, name, and classes."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["schools", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Private authenticated Google user pointer to their active groupId and profileId."
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/GroupWorkspace" },
+      "description": "Root competition group workspace document containing joinCode and bounded profileIds list."
+    },
+    "/groups/{groupId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Master Gate membership subcollection granting verified user devices access."
+    },
+    "/groups/{groupId}/profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/UserProfileDoc" },
+      "description": "Per-user synced progress, school, class, settings, theme, avatar, and login credentials."
+    },
+    "/groups/{groupId}/feed/{feedId}": {
+      "schema": { "$ref": "#/entities/GroupNotificationFeed" },
+      "description": "Shared group record-beaten notification feed."
+    },
+    "/joinCodes/{code}": {
+      "schema": { "$ref": "#/entities/JoinCode" },
+      "description": "Invite lookup document mapping a group/class join code to a groupId."
+    },
+    "/schoolDirectory/{directoryId}": {
+      "schema": { "$ref": "#/entities/SchoolDirectory" },
+      "description": "Non-PII directory document ('global') listing existing school names and class labels."
+    }
+  }
+}

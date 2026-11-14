@@ -216,7 +216,12 @@ export interface AvatarPreset {
 
 export interface UserProfile {
   id: string;
+  ownerUid?: string;
   name: string;
+  schoolName?: string;
+  className?: string;
+  login?: string;
+  passwordHash?: string;
   avatarId: string;
   customAvatarSpec?: AvatarSpec;
   xp: number;
@@ -231,6 +236,24 @@ export interface UserProfile {
   settings: AppSettings;
   activeThemeId?: string;
   customThemes?: ColorTheme[];
+}
+
+export type FamilyNotificationType =
+  | 'xp_overtake'
+  | 'speed_record'
+  | 'tournament_record'
+  | 'badge_earned';
+
+export interface FamilyNotification {
+  id: string;
+  createdAt: number;
+  type: FamilyNotificationType;
+  actorProfileId: string;
+  actorName: string;
+  targetProfileId?: string;
+  title: string;
+  message: string;
+  readByProfileIds: string[];
 }
 
 export interface VisualHintData {

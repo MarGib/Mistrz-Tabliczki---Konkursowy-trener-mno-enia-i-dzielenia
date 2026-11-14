@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Check, Shuffle, Sparkles, Wand2 } from 'lucide-react';
-import { AVATAR_CATEGORIES, PRESET_AVATARS } from '../data/avatars';
+import { AVATAR_CATEGORIES, ILLUSTRATED_MASCOTS, PRESET_AVATARS } from '../data/avatars';
 import {
   ACCESSORY_OPTIONS,
   AVATAR_PALETTE_SWATCHES,
@@ -306,15 +306,59 @@ export function AvatarStudio({
         </div>
       </div>
 
-      {/* 55 Ready-to-Pick Curated Avatars */}
+      {/* 9 Illustrated Mascots (Owl Style) */}
       <div className="space-y-3">
+        <div>
+          <h3 className="font-display text-base sm:text-lg font-bold text-[var(--th-text)]">
+            Ilustrowane Maskotki ({ILLUSTRATED_MASCOTS.length})
+          </h3>
+          <p className="text-xs text-[var(--th-text-muted)]">
+            Gotowe, ręcznie zaprojektowane postacie w stylu Mądrej Sowy — wybierz jedną kliknięciem.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2.5">
+          {ILLUSTRATED_MASCOTS.map((mascot) => {
+            const isSelected =
+              currentAvatarId === mascot.id ||
+              (mascot.id === 'owl' && currentAvatarId === 'owl-classic');
+            return (
+              <button
+                key={mascot.id}
+                type="button"
+                data-testid={`avatar-mascot-${mascot.id}`}
+                onClick={() => handlePickPreset(mascot.id, mascot.name)}
+                aria-label={`Wybierz maskotkę: ${mascot.name}`}
+                aria-pressed={isSelected}
+                className={`p-1.5 rounded-2xl border flex flex-col items-center gap-1 cursor-pointer transition-all ${
+                  isSelected
+                    ? 'bg-[var(--th-soft-tint)] border-[var(--th-primary)] ring-2 ring-[var(--th-primary)]'
+                    : 'bg-[var(--th-surface)] border-[var(--th-border)] hover:border-[var(--th-primary)]'
+                }`}
+              >
+                <AvatarDisplay
+                  avatarId={mascot.id}
+                  name={mascot.name}
+                  sizeClass="w-14 h-14 sm:w-16 sm:h-16"
+                />
+                <span className="text-[11px] font-semibold text-[var(--th-text)] truncate w-full text-center">
+                  {mascot.name}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 54 Ready-to-Pick Curated Vector Avatars */}
+      <div className="space-y-3 pt-2 border-t border-[var(--th-border)]">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="font-display text-base sm:text-lg font-bold text-[var(--th-text)]">
-              Gotowe awatary do wyboru ({PRESET_AVATARS.length + 1})
+              Dodatkowe ikony i odznaki ({PRESET_AVATARS.length})
             </h3>
             <p className="text-xs text-[var(--th-text-muted)]">
-              Kliknij dowolny obrazek, aby od razu ustawić go na swoim profilu.
+              Jeszcze więcej wariantów tematycznych pogrupowanych w 4 kategorie.
             </p>
           </div>
 
@@ -347,28 +391,6 @@ export function AvatarStudio({
           className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-9 gap-2.5 max-h-[360px] overflow-y-auto pr-1"
           data-testid="preset-avatars-grid"
         >
-          {categoryFilter === 'Wszystkie' && (
-            <button
-              type="button"
-              onClick={() => handlePickPreset('owl', 'Klasyczna Sowa z Gwiazdką')}
-              aria-label="Wybierz awatar: Klasyczna Sowa z Gwiazdką"
-              aria-pressed={currentAvatarId === 'owl' || currentAvatarId === 'owl-classic'}
-              className={`p-1.5 rounded-2xl border flex flex-col items-center gap-1 cursor-pointer transition-all ${
-                currentAvatarId === 'owl' || currentAvatarId === 'owl-classic'
-                  ? 'bg-[var(--th-soft-tint)] border-[var(--th-primary)] ring-2 ring-[var(--th-primary)]'
-                  : 'bg-[var(--th-surface)] border-[var(--th-border)] hover:border-[var(--th-primary)]'
-              }`}
-            >
-              <AvatarDisplay
-                avatarId="owl"
-                name="Sowa Klasyczna"
-                sizeClass="w-12 h-12 sm:w-14 sm:h-14"
-              />
-              <span className="text-[11px] font-semibold text-[var(--th-text)] truncate w-full text-center">
-                Sowa Klasyk
-              </span>
-            </button>
-          )}
 
           {filteredPresets.map((preset) => {
             const isSelected = currentAvatarId === preset.id;

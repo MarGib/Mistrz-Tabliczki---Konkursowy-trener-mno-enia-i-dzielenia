@@ -1,7 +1,28 @@
 import { useState } from 'react';
+import astroPenguinImg from '../assets/images/avatar_astro_penguin_1794659078223.jpg';
+import braveLionImg from '../assets/images/avatar_brave_lion_1794659079310.jpg';
+import cleverFoxImg from '../assets/images/avatar_clever_fox_1794659060923.jpg';
+import cosmicCatImg from '../assets/images/avatar_cosmic_cat_1794659061071.jpg';
+import emeraldDragonImg from '../assets/images/avatar_emerald_dragon_1794659076600.jpg';
+import mathPandaImg from '../assets/images/avatar_math_panda_1794659061531.jpg';
+import starUnicornImg from '../assets/images/avatar_star_unicorn_1794659077441.jpg';
+import turboRobotImg from '../assets/images/avatar_turbo_robot_1794659062013.jpg';
 import owlMascotImg from '../assets/images/mascot_math_owl_1794652991130.jpg';
 import { findPresetAvatar } from '../data/avatars';
 import type { AvatarCharacter, AvatarSpec } from '../types/math';
+
+const ILLUSTRATED_MASCOT_MAP: Record<string, string> = {
+  owl: owlMascotImg,
+  'owl-classic': owlMascotImg,
+  'mascot-fox': cleverFoxImg,
+  'mascot-cat': cosmicCatImg,
+  'mascot-panda': mathPandaImg,
+  'mascot-robot': turboRobotImg,
+  'mascot-dragon': emeraldDragonImg,
+  'mascot-unicorn': starUnicornImg,
+  'mascot-lion': braveLionImg,
+  'mascot-penguin': astroPenguinImg,
+};
 
 interface AvatarDisplayProps {
   avatarId: string;
@@ -314,11 +335,11 @@ export function AvatarDisplay({
     );
   }
 
-  // Keep the beloved generated owl mascot for default 'owl' / 'owl-classic' when no custom preset was chosen
-  if ((avatarId === 'owl' || avatarId === 'owl-classic') && !imgFailed) {
+  const illustratedSrc = ILLUSTRATED_MASCOT_MAP[avatarId];
+  if (illustratedSrc && !imgFailed) {
     return (
       <img
-        src={owlMascotImg}
+        src={illustratedSrc}
         alt={`Awatar ucznia ${name}`}
         referrerPolicy="no-referrer"
         onError={() => setImgFailed(true)}
@@ -332,8 +353,22 @@ export function AvatarDisplay({
     avatarId === 'custom' && customSpec
       ? customSpec
       : preset?.spec ??
-        (avatarId === 'fox'
+        (avatarId === 'fox' || avatarId === 'mascot-fox'
           ? findPresetAvatar('av-02')!.spec
+          : avatarId === 'mascot-cat'
+          ? findPresetAvatar('av-03')!.spec
+          : avatarId === 'mascot-panda'
+          ? findPresetAvatar('av-05')!.spec
+          : avatarId === 'mascot-robot'
+          ? findPresetAvatar('av-17')!.spec
+          : avatarId === 'mascot-dragon'
+          ? findPresetAvatar('av-46')!.spec
+          : avatarId === 'mascot-unicorn'
+          ? findPresetAvatar('av-44')!.spec
+          : avatarId === 'mascot-lion'
+          ? findPresetAvatar('av-07')!.spec
+          : avatarId === 'mascot-penguin'
+          ? findPresetAvatar('av-10')!.spec
           : avatarId === 'rocket'
           ? findPresetAvatar('av-20')!.spec
           : avatarId === 'star'

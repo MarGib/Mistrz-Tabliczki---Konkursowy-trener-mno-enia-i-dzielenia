@@ -214,13 +214,15 @@ test('PRESET_THEMES has at least 10 themes including Royal Purple, Chicago Bulls
   assert.equal(resolveThemeById('nonexistent').id, PRESET_THEMES[0].id);
 });
 
-import { PRESET_AVATARS } from '../data/avatars';
+import { ILLUSTRATED_MASCOTS, PRESET_AVATARS } from '../data/avatars';
 import { parseAvatarPrompt } from './avatarComposer';
-import { createFamilySeedProfiles } from '../data/curriculum';
+import { createFamilySeedProfiles, createFreshProfile } from '../data/curriculum';
 import { computeFamilySummary } from './familyStats';
 import { buildVictoryShareText } from './victoryCardCanvas';
 
-test('PRESET_AVATARS provides 50+ unique avatars and parseAvatarPrompt maps Polish descriptions', () => {
+test('PRESET_AVATARS and ILLUSTRATED_MASCOTS provide rich avatar pool and parseAvatarPrompt maps Polish descriptions', () => {
+  assert.ok(ILLUSTRATED_MASCOTS.length >= 9);
+  assert.equal(new Set(ILLUSTRATED_MASCOTS.map((a) => a.id)).size, ILLUSTRATED_MASCOTS.length);
   assert.ok(PRESET_AVATARS.length >= 50);
   const uniqueIds = new Set(PRESET_AVATARS.map((a) => a.id));
   assert.equal(uniqueIds.size, PRESET_AVATARS.length);
@@ -241,18 +243,45 @@ test('PRESET_AVATARS provides 50+ unique avatars and parseAvatarPrompt maps Poli
   assert.ok(fallback.bodyColor.startsWith('#'));
 });
 
-test('Family seed profiles and computeFamilySummary aggregate Ola, Mama, Tata, Natalka accurately', () => {
+test('Family seed profiles start cleanly at 0 XP / Level 1 / 0 streak and computeFamilySummary aggregates active players', () => {
   const family = createFamilySeedProfiles();
   assert.deepEqual(
     family.map((p) => p.name),
     ['Ola', 'Mama', 'Tata', 'Natalka']
   );
+  assert.ok(family.every((p) => p.xp === 0 && p.streakDays === 0 && p.sessions.length === 0));
 
-  const summary = computeFamilySummary(family);
+  const withSessions = family.map((p, idx) =>
+    idx === 0
+      ? {
+          ...p,
+          xp: 120,
+          streakDays: 1,
+          sessions: [
+            {
+              id: 's1',
+              timestamp: 1_700_000_000_000,
+              mode: 'mixed' as const,
+              seriesTitle: 'Start',
+              totalTasks: 10,
+              correctTasks: 9,
+              accuracyPct: 90,
+              totalTimeMs: 25_000,
+              avgTimeMs: 2500,
+              pointsEarned: 120,
+              passedThreshold: true,
+              attempts: [],
+            },
+          ],
+        }
+      : p
+  );
+
+  const summary = computeFamilySummary(withSessions);
   assert.equal(summary.members.length, 4);
-  assert.equal(summary.totalXp, family.reduce((s, p) => s + p.xp, 0));
-  assert.ok(summary.totalSolvedTasks > 100);
-  assert.ok(summary.fastestMember !== null);
+  assert.equal(summary.totalXp, 120);
+  assert.equal(summary.totalSolvedTasks, 10);
+  assert.equal(summary.fastestMember?.name, 'Ola');
   assert.equal(summary.xpLeader?.name, 'Ola');
 });
 
@@ -279,4 +308,316 @@ test('buildVictoryShareText formats Polish numeric summary for WhatsApp sharing'
   assert.ok(text.includes('+150 XP'));
   assert.ok(text.includes('Brązowy Rachmistrz'));
 });
+
+import { parseInitialStoreState } from '../store/useAppStore';
+
+test('parseInitialStoreState starts cleanly empty with no leaked profiles and restores saved owned accounts afterwards', () => {
+  const fresh = parseInitialStoreState(null);
+  assert.equal(fresh.hasSelectedProfile, false);
+  assert.equal(fresh.profiles.length, 0);
+  assert.equal(fresh.ownedProfileIds.length, 0);
+
+  const kuba = createFreshProfile('Kuba', 'mascot-fox', 1700000000000, undefined, 'SP nr 5', '4a');
+  const savedKuba = { ...kuba, activeThemeId: 'royal-purple', xp: 340 };
+  const other = createFreshProfile('Zosia', 'mascot-unicorn', 1700000000001, undefined, 'SP nr 5', '4b');
+
+  const restored = parseInitialStoreState(
+    JSON.stringify({
+      activeProfileId: savedKuba.id,
+      profiles: [savedKuba, other],
+      ownedProfileIds: [savedKuba.id],
+      hasSelectedProfile: true,
+    })
+  );
+  assert.equal(restored.hasSelectedProfile, true);
+  assert.equal(restored.activeProfileId, savedKuba.id);
+  assert.deepEqual(restored.ownedProfileIds, [savedKuba.id]);
+  const restoredKuba = restored.profiles.find((p) => p.id === savedKuba.id)!;
+  assert.equal(restoredKuba.activeThemeId, 'royal-purple');
+  assert.equal(restoredKuba.xp, 340);
+  assert.equal(restoredKuba.schoolName, 'SP nr 5');
+  assert.equal(restoredKuba.className, '4a');
+});
+
+import {
+  hashAccountPassword,
+  normalizeLogin,
+  verifyAccountCredentials,
+} from './accountSecurity';
+import {
+  generateSessionNotifications,
+  getUnreadNotificationsForProfile,
+} from './familyNotifications';
+
+test('accountSecurity normalizes Polish logins, hashes deterministically, and verifies credentials', () => {
+  assert.equal(normalizeLogin('  Łukasz Śliwa '), 'lukaszsliwa');
+  assert.equal(normalizeLogin('Natalka'), 'natalka');
+
+  const hash = hashAccountPassword('sekret123', 'user-natalka');
+  assert.ok(hash.length >= 16);
+  assert.equal(hash, hashAccountPassword('sekret123', 'user-natalka'));
+  assert.notEqual(hash, hashAccountPassword('sekret123', 'user-ola'));
+
+  const protectedProfile = {
+    id: 'user-natalka',
+    name: 'Natalka',
+    login: 'natalka',
+    passwordHash: hash,
+  };
+  assert.equal(verifyAccountCredentials(protectedProfile, 'sekret123', 'Natalka'), true);
+  assert.equal(verifyAccountCredentials(protectedProfile, 'zlehaslo', 'natalka'), false);
+  assert.equal(verifyAccountCredentials(protectedProfile, 'sekret123', 'ola'), false);
+});
+
+test('familyNotifications detects XP overtake and family speed record beaten', () => {
+  const baseFamily = createFamilySeedProfiles();
+  const ola: UserProfile = {
+    ...baseFamily.find((p) => p.name === 'Ola')!,
+    xp: 150,
+    sessions: [
+      {
+        id: 'ola-s1',
+        timestamp: 1_700_000_000_000,
+        mode: 'mixed',
+        seriesTitle: 'Rozgrzewka',
+        totalTasks: 10,
+        correctTasks: 9,
+        accuracyPct: 90,
+        totalTimeMs: 30_000,
+        avgTimeMs: 3000,
+        pointsEarned: 150,
+        passedThreshold: true,
+        attempts: [],
+      },
+    ],
+  };
+  const natalkaBefore = baseFamily.find((p) => p.name === 'Natalka')!;
+  const natalkaAfter: UserProfile = {
+    ...natalkaBefore,
+    xp: ola.xp + 25,
+  };
+
+  const notifications = generateSessionNotifications({
+    actorBefore: natalkaBefore,
+    actorAfter: natalkaAfter,
+    otherProfiles: [ola, ...baseFamily.filter((p) => p.id !== natalkaBefore.id && p.id !== ola.id)],
+    session: {
+      id: 's-fast',
+      timestamp: 1_700_100_000_000,
+      mode: 'mixed',
+      seriesTitle: 'Błyskawica',
+      totalTasks: 10,
+      correctTasks: 10,
+      accuracyPct: 100,
+      totalTimeMs: 12_000,
+      avgTimeMs: 1200,
+      pointsEarned: 175,
+      passedThreshold: true,
+      attempts: [],
+    },
+    newBadges: ['Nowa Odznaka'],
+    now: 1_700_100_000_000,
+  });
+
+  assert.ok(notifications.some((n) => n.type === 'xp_overtake' && n.targetProfileId === ola.id));
+  assert.ok(notifications.some((n) => n.type === 'speed_record'));
+  assert.ok(notifications.some((n) => n.type === 'badge_earned'));
+
+  // Actor doesn't see own alerts as unread; Ola sees them as unread
+  assert.equal(getUnreadNotificationsForProfile(notifications, natalkaAfter.id).length, 0);
+  assert.ok(getUnreadNotificationsForProfile(notifications, ola.id).length >= 2);
+});
+
+import {
+  mergeNotifications,
+  mergeProfiles,
+  sanitizeProfileForFirestore,
+  stripUndefinedDeep,
+} from './cloudMerge';
+
+test('cloudMerge sanitizes Firestore payloads, merges untouched device with cloud progress, and aggregates class/school standings', () => {
+  const cleaned = stripUndefinedDeep({ a: 0, b: undefined, c: { d: undefined, e: 'ok' } });
+  assert.deepEqual(cleaned, { a: 0, c: { e: 'ok' } });
+
+  const localBlank = createFreshProfile('Kuba', 'owl', 1700000000000, undefined, 'SP nr 5', '4a');
+  const cloudProgressed: UserProfile = {
+    ...localBlank,
+    ownerUid: 'uid-kuba',
+    xp: 480,
+    streakDays: 3,
+    activeThemeId: 'chicago-bulls',
+    sessions: [
+      {
+        id: 'sess-1',
+        timestamp: 1_700_050_000_000,
+        mode: 'mixed',
+        seriesTitle: 'Sprint',
+        totalTasks: 10,
+        correctTasks: 9,
+        accuracyPct: 90,
+        totalTimeMs: 28_000,
+        avgTimeMs: 2800,
+        pointsEarned: 150,
+        passedThreshold: true,
+        attempts: [],
+      },
+    ],
+  };
+
+  const firestoreDoc = sanitizeProfileForFirestore(cloudProgressed, 'grp-1', 'uid-kuba');
+  assert.equal(firestoreDoc.groupId, 'grp-1');
+  assert.equal(firestoreDoc.schoolName, 'SP nr 5');
+  assert.equal(firestoreDoc.className, '4a');
+  assert.equal(firestoreDoc.passwordHash, undefined);
+
+  const merged = mergeProfiles([localBlank], [cloudProgressed]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].xp, 480);
+  assert.equal(merged[0].activeThemeId, 'chicago-bulls');
+  assert.equal(merged[0].sessions.length, 1);
+
+  const classmate: UserProfile = {
+    ...createFreshProfile('Zosia', 'mascot-unicorn', 1700000000111, undefined, 'SP nr 5', '4b'),
+    xp: 220,
+  };
+  const summary = computeFamilySummary([cloudProgressed, classmate]);
+  assert.equal(summary.classStandings.length, 2);
+  assert.equal(summary.schoolStandings.length, 1);
+  assert.equal(summary.schoolStandings[0].totalXp, 700);
+
+  const mergedAlerts = mergeNotifications(
+    [
+      {
+        id: 'n1',
+        createdAt: 100,
+        type: 'xp_overtake',
+        actorProfileId: 'a',
+        actorName: 'A',
+        title: 'T',
+        message: 'M',
+        readByProfileIds: ['a'],
+      },
+    ],
+    [
+      {
+        id: 'n1',
+        createdAt: 100,
+        type: 'xp_overtake',
+        actorProfileId: 'a',
+        actorName: 'A',
+        title: 'T',
+        message: 'M',
+        readByProfileIds: ['b'],
+      },
+    ]
+  );
+  assert.equal(mergedAlerts.length, 1);
+  assert.deepEqual(mergedAlerts[0].readByProfileIds.sort(), ['a', 'b']);
+});
+
+import {
+  checkDuplicateClassAttempt,
+  mergeSchoolDirectories,
+  normalizeClassKey,
+  normalizeSchoolKey,
+  resolveCanonicalSchoolAndClass,
+} from './schoolDirectory';
+import {
+  buildPlayerDiagnostics,
+  buildReviewCalendar,
+  getReviewReminderBanner,
+} from './reviewCalendar';
+
+test('schoolDirectory prevents duplicate classes and merges canonical schools across inputs', () => {
+  assert.equal(normalizeSchoolKey('  SP nr. 5 w Łodzi '), 'sp nr 5 w lodzi');
+  assert.equal(normalizeClassKey('Klasa 4 A'), '4a');
+  assert.equal(normalizeClassKey('4a'), '4a');
+
+  const dir = mergeSchoolDirectories(
+    [[{ id: 'sp-nr-5', name: 'SP nr 5', classes: ['4a', '4b'] }]],
+    [
+      { schoolName: 'sp nr. 5', className: '4 A' },
+      { schoolName: 'SP nr 5', className: '5c' },
+    ]
+  );
+  assert.equal(dir.length, 1);
+  assert.deepEqual(dir[0].classes, ['4a', '4b', '5c']);
+
+  const dup = checkDuplicateClassAttempt(dir, 'sp nr 5', 'Kl. 4 A');
+  assert.equal(dup.isDuplicate, true);
+  assert.equal(dup.existingClass, '4a');
+
+  const notDup = checkDuplicateClassAttempt(dir, 'SP nr 5', '6b');
+  assert.equal(notDup.isDuplicate, false);
+
+  const resolved = resolveCanonicalSchoolAndClass(dir, 'sp nr. 5', '4A');
+  assert.equal(resolved.schoolName, 'SP nr 5');
+  assert.equal(resolved.className, '4a');
+  assert.equal(resolved.matchedExistingClass, true);
+});
+
+test('reviewCalendar and diagnostics highlight weak/slow/strong facts and 7-day schedule', () => {
+  const now = new Date('2026-11-14T10:00:00Z').getTime();
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  const memories: Record<string, FactMemory> = {
+    'mul:7x8': {
+      id: 'mul:7x8',
+      op: 'mul',
+      a: 7,
+      b: 8,
+      answer: 56,
+      easiness: 1.5,
+      intervalDays: 0.0015,
+      repetitions: 0,
+      nextReviewAt: now - 60_000,
+      attempts: 4,
+      correctCount: 2,
+      wrongCount: 2,
+      totalTimeMs: 24_000,
+      avgTimeMs: 6000,
+      lastTimeMs: 7000,
+      lastSeenAt: now - 10_000,
+      mastery: 'trudne',
+    },
+    'mul:3x4': {
+      id: 'mul:3x4',
+      op: 'mul',
+      a: 3,
+      b: 4,
+      answer: 12,
+      easiness: 2.6,
+      intervalDays: 1,
+      repetitions: 3,
+      nextReviewAt: now + oneDay,
+      attempts: 5,
+      correctCount: 5,
+      wrongCount: 0,
+      totalTimeMs: 7500,
+      avgTimeMs: 1500,
+      lastTimeMs: 1400,
+      lastSeenAt: now - 20_000,
+      mastery: 'mistrzowskie',
+    },
+  };
+
+  const diag = buildPlayerDiagnostics(memories);
+  assert.equal(diag.totalMeasured, 2);
+  assert.equal(diag.strongestFacts[0].id, 'mul:3x4');
+  assert.equal(diag.weakestFacts[0].id, 'mul:7x8');
+  assert.equal(diag.slowestFacts[0].id, 'mul:7x8');
+
+  const cal = buildReviewCalendar(memories, now);
+  assert.equal(cal.dueNow.length, 1);
+  assert.equal(cal.dueNow[0].id, 'mul:7x8');
+  assert.equal(cal.days.length, 7);
+  assert.equal(cal.days[0].count, 1);
+  assert.equal(cal.days[1].count, 1);
+
+  const reminder = getReviewReminderBanner(memories, now);
+  assert.ok(reminder !== null);
+  assert.equal(reminder!.hasDue, true);
+  assert.equal(reminder!.urgentCount, 1);
+});
+
 

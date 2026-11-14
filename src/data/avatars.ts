@@ -98,6 +98,23 @@ export const PRESET_AVATARS: AvatarPreset[] = CURATED_SPECS.map((item) => ({
   },
 }));
 
+export interface IllustratedMascotDef {
+  id: string;
+  name: string;
+}
+
+export const ILLUSTRATED_MASCOTS: IllustratedMascotDef[] = [
+  { id: 'owl', name: 'Mądra Sowa' },
+  { id: 'mascot-fox', name: 'Sprytny Lis' },
+  { id: 'mascot-cat', name: 'Kosmiczny Kotek' },
+  { id: 'mascot-panda', name: 'Panda Mistrz' },
+  { id: 'mascot-robot', name: 'Turbo Robot' },
+  { id: 'mascot-dragon', name: 'Zielony Smok' },
+  { id: 'mascot-unicorn', name: 'Gwiezdny Jednorożec' },
+  { id: 'mascot-lion', name: 'Odważny Lew' },
+  { id: 'mascot-penguin', name: 'Pingwin Odkrywca' },
+];
+
 export const AVATAR_CATEGORIES = CATEGORIES;
 
 export function findPresetAvatar(avatarId: string): AvatarPreset | undefined {

@@ -1,16 +1,26 @@
 import { useMemo, useState } from 'react';
 import {
   Brain,
+  CalendarDays,
   CheckCircle2,
   Clock,
   Crown,
-  Flame,
+  GraduationCap,
+  Lock,
   Play,
+  School,
   TrendingUp,
   Users,
   Zap,
 } from 'lucide-react';
+import { hasAccountPassword } from '../engine/accountSecurity';
 import { computeFamilySummary } from '../engine/familyStats';
+import {
+  buildPlayerDiagnostics,
+  buildReviewCalendar,
+  formatFactEquation,
+  formatFactPrompt,
+} from '../engine/reviewCalendar';
 import {
   getDifficultFacts,
   getDueFactCount,
@@ -24,7 +34,6 @@ interface StatsViewProps {
   profile: UserProfile;
   profiles: UserProfile[];
   isDark?: boolean;
-  onSwitchProfile: (profileId: string) => void;
   onStartFocusedDrill: (config: ActiveSeriesConfig) => void;
 }
 
@@ -40,12 +49,23 @@ export function StatsView({
   profile,
   profiles,
   isDark = false,
-  onSwitchProfile,
   onStartFocusedDrill,
 }: StatsViewProps) {
   const [matrixFilter, setMatrixFilter] = useState<'all' | 'difficult'>('all');
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   const familySummary = useMemo(() => computeFamilySummary(profiles), [profiles]);
+  const diagnostics = useMemo(
+    () => buildPlayerDiagnostics(profile.memories),
+    [profile.memories]
+  );
+  const reviewCalendar = useMemo(
+    () => buildReviewCalendar(profile.memories),
+    [profile.memories]
+  );
+  const activeCalendarDay =
+    reviewCalendar.days.find((d) => d.dateKey === selectedDayKey) ??
+    reviewCalendar.days[0];
 
   const memoriesList = useMemo(
     () => Object.values(profile.memories).filter((m) => m.attempts > 0),
@@ -94,14 +114,14 @@ export function StatsView({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6 sm:space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)]">
-            Statystyki Rodziny i Pamięć SuperMemo
+            Statystyki Graczy, Klas i Pamięć SuperMemo
           </h1>
           <p className="mt-1 text-sm sm:text-base text-[var(--th-text-muted)]">
-            Zobacz, jak idzie całej rodzinie ({profiles.map((p) => p.name).join(', ')}), porównuj szybkość na wykresie i ćwicz najtrudniejsze działania.
+            Porównuj wyniki, tempo na wykresie oraz rywalizację między klasami i szkołami ({profiles.length} {profiles.length === 1 ? 'gracz' : 'graczy'}).
           </p>
         </div>
         {difficultFacts.length > 0 && (
@@ -116,24 +136,24 @@ export function StatsView({
         )}
       </div>
 
-      {/* Whole-Family Mutual Leaderboard & Aggregate Metrics */}
+      {/* Group / Class Mutual Leaderboard & Aggregate Metrics */}
       <section
         aria-labelledby="family-stats-heading"
-        className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6 space-y-5"
+        className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5"
         data-testid="family-stats-section"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[var(--th-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 sm:pb-4 border-b border-[var(--th-border)]">
           <div className="flex items-center gap-2.5">
-            <Users className="w-5 h-5 text-[var(--th-primary)]" aria-hidden="true" />
+            <Users className="w-5 h-5 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
             <div>
               <h2
                 id="family-stats-heading"
-                className="font-display text-xl font-bold text-[var(--th-text)]"
+                className="font-display text-lg sm:text-xl font-bold text-[var(--th-text)]"
               >
-                Statystyki Całej Rodziny ({profiles.length} graczy)
+                Tabela Wyników ({profiles.length} {profiles.length === 1 ? 'użytkownik' : 'użytkowników'})
               </h2>
               <p className="text-xs text-[var(--th-text-muted)]">
-                Wszyscy widzą swoje postępy wzajemnie — przełącz profil jednym kliknięciem i pobij rodzinny rekord!
+                Każdy gracz chroni własne konto, a wyniki klasy, znajomych lub rodziny można porównywać na żywo.
               </p>
             </div>
           </div>
@@ -146,11 +166,11 @@ export function StatsView({
           )}
         </div>
 
-        {/* 4 Collective Family KPIs */}
+        {/* 4 Collective Group KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-4">
             <div className="text-xs font-semibold text-[var(--th-text-muted)]">
-              Łączne punkty rodziny
+              Łączne punkty grupy
             </div>
             <div className="mt-1 font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)] tabular-nums">
               {familySummary.totalXp} XP
@@ -174,7 +194,7 @@ export function StatsView({
 
           <div className="bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-4">
             <div className="text-xs font-semibold text-[var(--th-text-muted)]">
-              Średnia celność rodziny
+              Średnia celność grupy
             </div>
             <div className="mt-1 font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)] tabular-nums">
               {familySummary.familyAvgAccuracyPct}%
@@ -186,7 +206,7 @@ export function StatsView({
 
           <div className="bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-4">
             <div className="text-xs font-semibold text-[var(--th-text-muted)]">
-              Średnie tempo rodziny
+              Średnie tempo grupy
             </div>
             <div className="mt-1 font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)] tabular-nums">
               {familySummary.familyAvgTimeSec !== null
@@ -223,17 +243,29 @@ export function StatsView({
                     sizeClass="w-11 h-11"
                   />
                   <div className="min-w-0">
-                    <div className="font-display font-bold text-base text-[var(--th-text)] truncate">
-                      {member.name} {isActive ? '(Twój widok)' : ''}
+                    <div className="font-display font-bold text-base text-[var(--th-text)] truncate inline-flex items-center gap-1.5">
+                      <span>{member.name} {isActive ? '(Ty)' : ''}</span>
+                      {hasAccountPassword(
+                        profiles.find((p) => p.id === member.profileId) ?? profile
+                      ) && (
+                        <Lock
+                          className="w-3.5 h-3.5 text-[var(--th-text-muted)] shrink-0"
+                          aria-label="Konto chronione hasłem"
+                        />
+                      )}
                     </div>
-                    <div className="text-xs text-[var(--th-text-muted)] tabular-nums">
+                    <div className="text-xs text-[var(--th-text-muted)] tabular-nums truncate">
+                      {[member.schoolName, member.className ? `Klasa ${member.className}` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      {(member.schoolName || member.className) ? ' · ' : ''}
                       Poziom {member.level} ({member.levelTitle}) · Seria {member.streakDays} dni
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between md:justify-end gap-x-5 gap-y-2 text-xs sm:text-sm tabular-nums">
-                  <div className="text-left sm:text-right">
+                <div className="grid grid-cols-4 md:flex md:flex-wrap items-center md:justify-end gap-x-3 sm:gap-x-5 gap-y-2 text-xs sm:text-sm tabular-nums">
+                  <div className="text-left md:text-right">
                     <div className="text-[11px] text-[var(--th-text-muted)]">Punkty</div>
                     <div className="font-display font-bold text-[var(--th-primary)] inline-flex items-center gap-1">
                       <Zap className="w-3.5 h-3.5" aria-hidden="true" />
@@ -241,14 +273,14 @@ export function StatsView({
                     </div>
                   </div>
 
-                  <div className="text-left sm:text-right">
-                    <div className="text-[11px] text-[var(--th-text-muted)]">Skuteczność</div>
+                  <div className="text-left md:text-right">
+                    <div className="text-[11px] text-[var(--th-text-muted)]">Celność</div>
                     <div className="font-bold text-[var(--th-text)]">
                       {member.solvedTasks > 0 ? `${member.accuracyPct}%` : 'Brak'}
                     </div>
                   </div>
 
-                  <div className="text-left sm:text-right">
+                  <div className="text-left md:text-right">
                     <div className="text-[11px] text-[var(--th-text-muted)]">Śr. czas</div>
                     <div className="font-mono font-bold text-[var(--th-text)]">
                       {member.avgTimeSec !== null
@@ -257,28 +289,96 @@ export function StatsView({
                     </div>
                   </div>
 
-                  <div className="text-left sm:text-right">
+                  <div className="text-left md:text-right">
                     <div className="text-[11px] text-[var(--th-text-muted)]">Serie</div>
                     <div className="font-bold text-[var(--th-text)]">
                       {member.sessionsCount}
                     </div>
                   </div>
-
-                  {!isActive && (
-                    <button
-                      type="button"
-                      onClick={() => onSwitchProfile(member.profileId)}
-                      className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[var(--th-surface-muted)] hover:border-[var(--th-primary)] border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] cursor-pointer whitespace-nowrap"
-                    >
-                      Przełącz na {member.name}
-                    </button>
-                  )}
                 </div>
               </div>
             );
           })}
         </div>
       </section>
+
+      {/* Inter-Class & Inter-School Competition Standings */}
+      {(familySummary.classStandings.length > 0 || familySummary.schoolStandings.length > 0) && (
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          {familySummary.classStandings.length > 0 && (
+            <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-[var(--th-primary)]" aria-hidden="true" />
+                <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
+                  Ranking Klas ({familySummary.classStandings.length})
+                </h2>
+              </div>
+              <div className="divide-y divide-[var(--th-border)] border border-[var(--th-border)] rounded-2xl overflow-hidden">
+                {familySummary.classStandings.map((cls, i) => (
+                  <div
+                    key={cls.key}
+                    className="px-4 py-3 flex items-center justify-between gap-3 bg-[var(--th-surface)] text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-display font-bold text-[var(--th-text)] truncate">
+                        {i + 1}. {cls.label}
+                      </div>
+                      <div className="text-xs text-[var(--th-text-muted)] truncate">
+                        {cls.sublabel ? `${cls.sublabel} · ` : ''}
+                        {cls.membersCount} {cls.membersCount === 1 ? 'uczeń' : 'uczniów'} · Celność {cls.avgAccuracyPct}%
+                      </div>
+                    </div>
+                    <div className="text-right tabular-nums shrink-0">
+                      <div className="font-display font-bold text-[var(--th-primary)]">
+                        {cls.totalXp} XP
+                      </div>
+                      <div className="text-[11px] text-[var(--th-text-muted)]">
+                        {cls.avgTimeSec !== null ? `${cls.avgTimeSec.toFixed(1).replace('.', ',')} s` : '—'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {familySummary.schoolStandings.length > 0 && (
+            <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <School className="w-5 h-5 text-[var(--th-primary)]" aria-hidden="true" />
+                <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
+                  Ranking Szkół ({familySummary.schoolStandings.length})
+                </h2>
+              </div>
+              <div className="divide-y divide-[var(--th-border)] border border-[var(--th-border)] rounded-2xl overflow-hidden">
+                {familySummary.schoolStandings.map((sch, i) => (
+                  <div
+                    key={sch.key}
+                    className="px-4 py-3 flex items-center justify-between gap-3 bg-[var(--th-surface)] text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-display font-bold text-[var(--th-text)] truncate">
+                        {i + 1}. {sch.label}
+                      </div>
+                      <div className="text-xs text-[var(--th-text-muted)] truncate">
+                        {sch.membersCount} {sch.membersCount === 1 ? 'uczeń' : 'uczniów'} · Celność {sch.avgAccuracyPct}%
+                      </div>
+                    </div>
+                    <div className="text-right tabular-nums shrink-0">
+                      <div className="font-display font-bold text-[var(--th-primary)]">
+                        {sch.totalXp} XP
+                      </div>
+                      <div className="text-[11px] text-[var(--th-text-muted)]">
+                        {sch.avgTimeSec !== null ? `${sch.avgTimeSec.toFixed(1).replace('.', ',')} s` : '—'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Active User 4-column Summary Metrics */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -336,10 +436,10 @@ export function StatsView({
         {/* Progress Over Recent Sessions (Recharts) */}
         <section className="lg:col-span-7 bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6">
           <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
-            Tendencja szybkości i skuteczności całej rodziny
+            Tendencja szybkości i skuteczności graczy
           </h2>
           <p className="text-sm text-[var(--th-text-muted)] mb-4">
-            Porównuj średni czas odpowiedzi w kolejnych seriach dla poszczególnych członków rodziny.
+            Porównuj średni czas odpowiedzi w kolejnych seriach dla użytkowników z grupy.
           </p>
 
           <ProgressTrendChart
@@ -388,69 +488,196 @@ export function StatsView({
           )}
         </section>
 
-        {/* Hardest & Slowest Facts List */}
-        <section className="lg:col-span-5 bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
-              Nad czym najdłużej się zastanawiasz?
-            </h2>
-          </div>
-          <p className="text-sm text-[var(--th-text-muted)] mb-4">
-            Zadania posortowane według czasu namysłu i błędów ({profile.name}).
-          </p>
+        {/* Hardest & Slowest Facts + Strongest Facts */}
+        <section className="lg:col-span-5 space-y-6">
+          <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
+                Nad czym najdłużej się zastanawiasz?
+              </h2>
+            </div>
+            <p className="text-sm text-[var(--th-text-muted)] mb-4">
+              Zadania posortowane według czasu namysłu i błędów ({profile.name}).
+            </p>
 
-          {slowestFacts.length === 0 ? (
-            <div className="py-10 text-center bg-[var(--th-surface-muted)] rounded-2xl border border-[var(--th-border)] text-sm text-[var(--th-text-muted)]">
-              Brak zmierzonych zadań — zacznij trening, aby odkryć najtrudniejsze pary liczb.
-            </div>
-          ) : (
-            <div className="divide-y divide-[var(--th-border)] border border-[var(--th-border)] rounded-2xl overflow-hidden">
-              {slowestFacts.map((fact) => {
-                const eq =
-                  fact.op === 'mul'
-                    ? `${fact.a} × ${fact.b} = ${fact.answer}`
-                    : `${fact.a} ÷ ${fact.b} = ${fact.answer}`;
-                return (
+            {slowestFacts.length === 0 ? (
+              <div className="py-8 text-center bg-[var(--th-surface-muted)] rounded-2xl border border-[var(--th-border)] text-sm text-[var(--th-text-muted)]">
+                Brak zmierzonych zadań — zacznij trening, aby odkryć najtrudniejsze pary liczb.
+              </div>
+            ) : (
+              <div className="divide-y divide-[var(--th-border)] border border-[var(--th-border)] rounded-2xl overflow-hidden">
+                {slowestFacts.map((fact) => {
+                  const eq =
+                    fact.op === 'mul'
+                      ? `${fact.a} × ${fact.b} = ${fact.answer}`
+                      : `${fact.a} ÷ ${fact.b} = ${fact.answer}`;
+                  return (
+                    <div
+                      key={fact.id}
+                      className="flex items-center justify-between gap-3 px-4 py-3 bg-[var(--th-surface)] text-sm"
+                    >
+                      <div>
+                        <div className="font-display font-bold text-base text-[var(--th-text)] tabular-nums">
+                          {eq}
+                        </div>
+                        <div className="text-xs text-[var(--th-text-muted)] tabular-nums">
+                          {MASTERY_LABELS[fact.mastery]} · Błędów: {fact.wrongCount}/{fact.attempts}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-xs sm:text-sm font-bold text-[var(--th-text)] bg-[var(--th-surface-muted)] border border-[var(--th-border)] px-2.5 py-1 rounded-lg tabular-nums">
+                          {(fact.avgTimeMs / 1000).toFixed(1).replace('.', ',')} s
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onStartFocusedDrill({
+                              title: `Szlifowanie: ${eq}`,
+                              mode: fact.op,
+                              maxRange: profile.settings.maxRange,
+                              taskCount: 8,
+                              focusFactIds: [fact.id],
+                            })
+                          }
+                          aria-label={`Ćwicz działanie ${eq}`}
+                          className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[var(--th-soft-tint)] hover:opacity-90 text-[var(--th-primary)] text-xs font-bold cursor-pointer transition-colors"
+                        >
+                          Ćwicz
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6">
+            <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
+              Mocne strony ({profile.name})
+            </h2>
+            <p className="text-sm text-[var(--th-text-muted)] mb-3">
+              Działania opanowane z najwyższą skutecznością i najkrótszym czasem odpowiedzi.
+            </p>
+            {diagnostics.strongestFacts.length === 0 ? (
+              <div className="py-6 text-center bg-[var(--th-surface-muted)] rounded-2xl border border-[var(--th-border)] text-sm text-[var(--th-text-muted)]">
+                Rozegraj serię, aby zobaczyć swoje najsilniejsze działania.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {diagnostics.strongestFacts.map((f) => (
                   <div
-                    key={fact.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3 bg-[var(--th-surface)] text-sm"
+                    key={f.id}
+                    className="px-3 py-2 rounded-xl bg-[var(--th-surface-muted)] border border-[var(--th-border)] flex items-center justify-between gap-2 text-xs"
                   >
-                    <div>
-                      <div className="font-display font-bold text-base text-[var(--th-text)] tabular-nums">
-                        {eq}
-                      </div>
-                      <div className="text-xs text-[var(--th-text-muted)] tabular-nums">
-                        {MASTERY_LABELS[fact.mastery]} · Błędów: {fact.wrongCount}/{fact.attempts}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-mono text-xs sm:text-sm font-bold text-[var(--th-text)] bg-[var(--th-surface-muted)] border border-[var(--th-border)] px-2.5 py-1 rounded-lg tabular-nums">
-                        {(fact.avgTimeMs / 1000).toFixed(1).replace('.', ',')} s
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onStartFocusedDrill({
-                            title: `Szlifowanie: ${eq}`,
-                            mode: fact.op,
-                            maxRange: profile.settings.maxRange,
-                            taskCount: 8,
-                            focusFactIds: [fact.id],
-                          })
-                        }
-                        aria-label={`Ćwicz działanie ${eq}`}
-                        className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[var(--th-soft-tint)] hover:opacity-90 text-[var(--th-primary)] text-xs font-bold cursor-pointer transition-colors"
-                      >
-                        Ćwicz
-                      </button>
-                    </div>
+                    <span className="font-mono font-bold text-[var(--th-text)] tabular-nums">
+                      {formatFactEquation(f)}
+                    </span>
+                    <span className="font-mono font-bold text-emerald-600 tabular-nums">
+                      {(f.avgTimeMs / 1000).toFixed(1).replace('.', ',')} s
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </div>
+
+      {/* 7-Day Review Calendar */}
+      <section
+        className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6 space-y-4"
+        data-testid="stats-review-calendar"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-5 h-5 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
+            <div>
+              <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
+                Kalendarz Powtórek SuperMemo (7 dni)
+              </h2>
+              <p className="text-xs sm:text-sm text-[var(--th-text-muted)]">
+                System wyznacza optymalny dzień powtórki każdego działania, zanim wyleci z pamięci.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-[var(--th-primary)] tabular-nums">
+            Zaplanowano na tydzień: {reviewCalendar.totalScheduled7Days}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 sm:gap-2.5">
+          {reviewCalendar.days.map((day) => {
+            const isSelected = activeCalendarDay?.dateKey === day.dateKey;
+            return (
+              <button
+                key={day.dateKey}
+                type="button"
+                onClick={() => setSelectedDayKey(day.dateKey)}
+                className={`p-1 sm:p-3 rounded-xl sm:rounded-2xl border text-center cursor-pointer transition-all ${
+                  isSelected
+                    ? 'bg-[var(--th-soft-tint)] border-[var(--th-primary)]'
+                    : 'bg-[var(--th-surface-muted)] border-[var(--th-border)] hover:border-[var(--th-primary)]'
+                }`}
+              >
+                <div className="text-[10px] sm:text-xs font-bold text-[var(--th-text)]">
+                  {day.label}
+                </div>
+                <div className="text-[9px] sm:text-[10px] text-[var(--th-text-muted)] tabular-nums">
+                  {day.shortDate}
+                </div>
+                <div
+                  className={`mt-1 font-display text-base sm:text-xl font-extrabold tabular-nums ${
+                    day.count > 0
+                      ? day.isToday
+                        ? 'text-[var(--th-accent)]'
+                        : 'text-[var(--th-primary)]'
+                      : 'text-[var(--th-text-muted)]'
+                  }`}
+                >
+                  {day.count}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {activeCalendarDay && (
+          <div className="bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs sm:text-sm font-bold text-[var(--th-text)]">
+                {activeCalendarDay.label} ({activeCalendarDay.shortDate}) — {activeCalendarDay.count}{' '}
+                {activeCalendarDay.count === 1 ? 'działanie' : 'działań'} do powtórki
+              </div>
+              <div className="mt-1 text-xs text-[var(--th-text-muted)] truncate">
+                {activeCalendarDay.count > 0
+                  ? activeCalendarDay.facts
+                      .slice(0, 8)
+                      .map((f) => formatFactPrompt(f))
+                      .join(' · ')
+                  : 'Brak zaplanowanych powtórek na ten dzień.'}
+              </div>
+            </div>
+            {activeCalendarDay.count > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  onStartFocusedDrill({
+                    title: `Powtórka: ${activeCalendarDay.label} (${activeCalendarDay.shortDate})`,
+                    mode: 'mixed',
+                    maxRange: profile.settings.maxRange,
+                    taskCount: Math.max(8, Math.min(12, activeCalendarDay.facts.length + 2)),
+                    focusFactIds: activeCalendarDay.facts.slice(0, 10).map((f) => f.id),
+                  })
+                }
+                className="min-h-[40px] px-4 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold shrink-0 cursor-pointer"
+              >
+                Przećwicz zadania z tego dnia
+              </button>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Interactive 10x10 Multiplication Mastery Matrix */}
       <section className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6">

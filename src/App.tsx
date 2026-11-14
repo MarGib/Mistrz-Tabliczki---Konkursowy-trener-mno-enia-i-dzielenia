@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExerciseArena } from './components/ExerciseArena';
+import { FamilyWelcomeGate } from './components/FamilyWelcomeGate';
+import { NotificationCenter } from './components/NotificationCenter';
 import { ProfileSettingsView } from './components/ProfileSettingsView';
 import { StatsView } from './components/StatsView';
 import { ThemesView } from './components/ThemesView';
@@ -9,6 +11,7 @@ import { TrainingHome } from './components/TrainingHome';
 import { findPresetAvatar } from './data/avatars';
 import { resolveThemeById } from './data/themes';
 import { classifyDevice } from './engine/deviceDetector';
+import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
@@ -25,21 +28,37 @@ function detectCurrentDevice(): DeviceProfile {
 export default function App() {
   const {
     profiles,
+    ownedProfiles,
     activeProfile,
+    hasSelectedProfile,
+    notifications,
+    schoolDirectory,
+    cloudMeta,
+    cloudStatus,
+    cloudError,
     switchProfile,
+    loginWithCredentials,
+    reopenProfilePicker,
     createProfile,
     deleteProfile,
-    addMissingFamilyProfiles,
     updateProfileMeta,
+    setProfileCredentials,
+    clearProfilePassword,
+    markNotificationRead,
+    markAllNotificationsRead,
     updateSettings,
     recordCompletedSession,
     setActiveTheme,
     saveCustomTheme,
     deleteCustomTheme,
-    resetDemoData,
+    connectGoogleCloud,
+    disconnectGoogleCloud,
+    joinGroupCode,
+    resetLocalData,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<NavTab>('trening');
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [device, setDevice] = useState<DeviceProfile>(detectCurrentDevice);
   const [activeSeries, setActiveSeries] = useState<ActiveSeriesConfig | null>(() => {
     if (typeof window !== 'undefined') {
@@ -62,6 +81,11 @@ export default function App() {
   );
 
   const cssVars = useMemo(() => themeToCssVariables(activeTheme), [activeTheme]);
+
+  const unreadNotifications = useMemo(
+    () => getUnreadNotificationsForProfile(notifications, activeProfile.id),
+    [notifications, activeProfile.id]
+  );
 
   // Keep <body> synced with the active user's theme canvas & text colors
   useEffect(() => {
@@ -105,99 +129,152 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
+  const showWelcomeGate =
+    (!hasSelectedProfile || ownedProfiles.length === 0) && !activeSeries;
+
   return (
     <div
       style={cssVars as React.CSSProperties}
-      className="min-h-screen bg-[var(--th-canvas)] text-[var(--th-text)] flex flex-col transition-colors duration-200"
+      className="min-h-screen bg-[var(--th-canvas)] text-[var(--th-text)] flex flex-col transition-colors duration-200 overflow-x-hidden"
       data-device={device.category}
       data-orientation={device.orientation}
       data-active-theme={activeTheme.id}
       data-theme-dark={activeTheme.tokens.isDark ? 'true' : 'false'}
     >
-      {!activeSeries && (
-        <TopNav
-          activeTab={activeTab}
-          onSelectTab={handleSelectTab}
-          onQuickStart={handleQuickStart}
-          userName={activeProfile.name}
-          xp={activeProfile.xp}
-          streakDays={activeProfile.streakDays}
+      {showWelcomeGate ? (
+        <FamilyWelcomeGate
+          ownedProfiles={ownedProfiles}
+          hasGroupAccounts={profiles.length > 0}
+          schoolDirectory={schoolDirectory}
           device={device}
+          cloudStatus={cloudStatus}
+          cloudError={cloudError}
+          onSelectProfile={(id) => {
+            switchProfile(id);
+            window.scrollTo(0, 0);
+          }}
+          onSetCredentialsAndEnter={(id, login, pwd) => {
+            setProfileCredentials(id, login, pwd);
+            window.scrollTo(0, 0);
+          }}
+          onLoginWithCredentials={loginWithCredentials}
+          onCreateProfile={(name, avatarId, customSpec, login, password, schoolName, className) => {
+            createProfile(name, avatarId, customSpec, login, password, schoolName, className);
+            window.scrollTo(0, 0);
+          }}
+          onConnectGoogle={connectGoogleCloud}
         />
-      )}
+      ) : (
+        <>
+          {!activeSeries && (
+            <TopNav
+              activeTab={activeTab}
+              onSelectTab={handleSelectTab}
+              onQuickStart={handleQuickStart}
+              onOpenNotifications={() => setIsNotificationsOpen(true)}
+              unreadNotificationsCount={unreadNotifications.length}
+              userName={activeProfile.name}
+              xp={activeProfile.xp}
+              streakDays={activeProfile.streakDays}
+              device={device}
+            />
+          )}
 
-      <main className={`flex-1 ${!activeSeries ? 'pb-20 md:pb-8' : 'pb-6'}`}>
-        {activeSeries ? (
-          <ExerciseArena
-            key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}
-            config={activeSeries}
-            memories={activeProfile.memories}
-            settings={activeProfile.settings}
-            device={device}
-            isDark={activeTheme.tokens.isDark}
-            playerName={activeProfile.name}
-            avatarSpec={
-              activeProfile.avatarId === 'custom' && activeProfile.customAvatarSpec
-                ? activeProfile.customAvatarSpec
-                : findPresetAvatar(activeProfile.avatarId)?.spec
-            }
-            themePrimary={activeTheme.tokens.primary}
-            themeAccent={activeTheme.tokens.accent}
-            onUpdateSettings={updateSettings}
-            onCompleteSession={recordCompletedSession}
-            onExit={() => setActiveSeries(null)}
-            onRestartWithFocus={handleRestartWithFocus}
+          <main className={`flex-1 ${!activeSeries ? 'pb-20 md:pb-8' : 'pb-6'}`}>
+            {activeSeries ? (
+              <ExerciseArena
+                key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}
+                config={activeSeries}
+                memories={activeProfile.memories}
+                settings={activeProfile.settings}
+                device={device}
+                isDark={activeTheme.tokens.isDark}
+                playerName={activeProfile.name}
+                avatarSpec={
+                  activeProfile.avatarId === 'custom' && activeProfile.customAvatarSpec
+                    ? activeProfile.customAvatarSpec
+                    : findPresetAvatar(activeProfile.avatarId)?.spec
+                }
+                themePrimary={activeTheme.tokens.primary}
+                themeAccent={activeTheme.tokens.accent}
+                onUpdateSettings={updateSettings}
+                onCompleteSession={recordCompletedSession}
+                onExit={() => setActiveSeries(null)}
+                onRestartWithFocus={handleRestartWithFocus}
+              />
+            ) : activeTab === 'trening' ? (
+              <TrainingHome
+                profile={activeProfile}
+                device={device}
+                unreadNotifications={unreadNotifications}
+                onReopenProfilePicker={reopenProfilePicker}
+                onOpenNotifications={() => setIsNotificationsOpen(true)}
+                onStartSeries={(cfg) => setActiveSeries(cfg)}
+                onOpenSettings={() => handleSelectTab('konto')}
+                onOpenStats={() => handleSelectTab('statystyki')}
+                onOpenTournaments={() => handleSelectTab('turnieje')}
+              />
+            ) : activeTab === 'turnieje' ? (
+              <TournamentsView
+                profile={activeProfile}
+                profiles={profiles}
+                onStartTournament={(cfg) => setActiveSeries(cfg)}
+              />
+            ) : activeTab === 'statystyki' ? (
+              <StatsView
+                profile={activeProfile}
+                profiles={profiles}
+                isDark={activeTheme.tokens.isDark}
+                onStartFocusedDrill={(cfg) => setActiveSeries(cfg)}
+              />
+            ) : activeTab === 'szablony' ? (
+              <ThemesView
+                activeProfileName={activeProfile.name}
+                activeThemeId={activeTheme.id}
+                customThemes={activeProfile.customThemes ?? []}
+                onSelectTheme={setActiveTheme}
+                onSaveCustomTheme={saveCustomTheme}
+                onDeleteCustomTheme={deleteCustomTheme}
+              />
+            ) : (
+              <ProfileSettingsView
+                ownedProfiles={ownedProfiles}
+                activeProfile={activeProfile}
+                schoolDirectory={schoolDirectory}
+                activeTheme={activeTheme}
+                device={device}
+                cloudMeta={cloudMeta}
+                cloudStatus={cloudStatus}
+                cloudError={cloudError}
+                onSwitchProfile={switchProfile}
+                onCreateProfile={createProfile}
+                onDeleteProfile={deleteProfile}
+                onUpdateProfileMeta={updateProfileMeta}
+                onSetProfileCredentials={setProfileCredentials}
+                onClearProfilePassword={clearProfilePassword}
+                onSelectTheme={setActiveTheme}
+                onOpenThemesTab={() => handleSelectTab('szablony')}
+                onUpdateSettings={updateSettings}
+                onConnectGoogle={connectGoogleCloud}
+                onDisconnectGoogle={disconnectGoogleCloud}
+                onJoinGroupCode={joinGroupCode}
+                onResetLocalData={resetLocalData}
+                onReopenProfilePicker={reopenProfilePicker}
+              />
+            )}
+          </main>
+
+          <NotificationCenter
+            open={isNotificationsOpen && !activeSeries}
+            notifications={notifications}
+            activeProfileId={activeProfile.id}
+            onClose={() => setIsNotificationsOpen(false)}
+            onMarkRead={markNotificationRead}
+            onMarkAllRead={markAllNotificationsRead}
+            onOpenFamilyStats={() => handleSelectTab('statystyki')}
           />
-        ) : activeTab === 'trening' ? (
-          <TrainingHome
-            profile={activeProfile}
-            profiles={profiles}
-            device={device}
-            onSwitchProfile={switchProfile}
-            onStartSeries={(cfg) => setActiveSeries(cfg)}
-            onOpenSettings={() => handleSelectTab('konto')}
-          />
-        ) : activeTab === 'turnieje' ? (
-          <TournamentsView
-            profile={activeProfile}
-            profiles={profiles}
-            onStartTournament={(cfg) => setActiveSeries(cfg)}
-          />
-        ) : activeTab === 'statystyki' ? (
-          <StatsView
-            profile={activeProfile}
-            profiles={profiles}
-            isDark={activeTheme.tokens.isDark}
-            onSwitchProfile={switchProfile}
-            onStartFocusedDrill={(cfg) => setActiveSeries(cfg)}
-          />
-        ) : activeTab === 'szablony' ? (
-          <ThemesView
-            activeProfileName={activeProfile.name}
-            activeThemeId={activeTheme.id}
-            customThemes={activeProfile.customThemes ?? []}
-            onSelectTheme={setActiveTheme}
-            onSaveCustomTheme={saveCustomTheme}
-            onDeleteCustomTheme={deleteCustomTheme}
-          />
-        ) : (
-          <ProfileSettingsView
-            profiles={profiles}
-            activeProfile={activeProfile}
-            activeTheme={activeTheme}
-            device={device}
-            onSwitchProfile={switchProfile}
-            onCreateProfile={createProfile}
-            onDeleteProfile={deleteProfile}
-            onAddMissingFamily={addMissingFamilyProfiles}
-            onUpdateProfileMeta={updateProfileMeta}
-            onSelectTheme={setActiveTheme}
-            onOpenThemesTab={() => handleSelectTab('szablony')}
-            onUpdateSettings={updateSettings}
-            onResetDemo={resetDemoData}
-          />
-        )}
-      </main>
+        </>
+      )}
     </div>
   );
 }

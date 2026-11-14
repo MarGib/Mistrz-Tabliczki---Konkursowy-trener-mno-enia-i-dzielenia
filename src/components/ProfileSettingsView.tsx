@@ -2,21 +2,37 @@ import { useEffect, useState } from 'react';
 import {
   Award,
   Check,
+  Cloud,
+  Copy,
+  GraduationCap,
+  KeyRound,
+  Lock,
+  LogOut,
   Monitor,
   Palette,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Sliders,
   Smartphone,
   Tablet,
   Trash2,
+  Unlock,
   UserPlus,
   Users,
 } from 'lucide-react';
-import { ALL_BADGES, STARTER_FAMILY_TEMPLATES } from '../data/curriculum';
+import { ALL_BADGES } from '../data/curriculum';
 import { PRESET_THEMES } from '../data/themes';
+import {
+  hasAccountPassword,
+  normalizeLogin,
+  verifyAccountCredentials,
+} from '../engine/accountSecurity';
 import { parseAvatarPrompt } from '../engine/avatarComposer';
+import type { CloudSessionMeta } from '../engine/cloudSync';
+import type { SchoolDirectoryEntry } from '../engine/schoolDirectory';
 import { computeUserLevel } from '../engine/spacedRepetition';
+import type { CloudSyncStatus } from '../store/useAppStore';
 import type {
   AppSettings,
   AvatarSpec,
@@ -26,21 +42,45 @@ import type {
 } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 import { AvatarStudio } from './AvatarStudio';
+import { SchoolClassSelector } from './SchoolClassSelector';
 
 interface ProfileSettingsViewProps {
-  profiles: UserProfile[];
+  ownedProfiles: UserProfile[];
   activeProfile: UserProfile;
+  schoolDirectory: SchoolDirectoryEntry[];
   activeTheme: ColorTheme;
   device: DeviceProfile;
+  cloudMeta: CloudSessionMeta | null;
+  cloudStatus: CloudSyncStatus;
+  cloudError: string | null;
   onSwitchProfile: (id: string) => void;
-  onCreateProfile: (name: string, avatarId: string, customAvatarSpec?: AvatarSpec) => void;
+  onCreateProfile: (
+    name: string,
+    avatarId: string,
+    customAvatarSpec?: AvatarSpec,
+    login?: string,
+    password?: string,
+    schoolName?: string,
+    className?: string
+  ) => void;
   onDeleteProfile: (id: string) => void;
-  onAddMissingFamily: () => void;
-  onUpdateProfileMeta: (name: string, avatarId: string, customAvatarSpec?: AvatarSpec) => void;
+  onUpdateProfileMeta: (
+    name: string,
+    avatarId: string,
+    customAvatarSpec?: AvatarSpec,
+    schoolName?: string,
+    className?: string
+  ) => void;
+  onSetProfileCredentials: (profileId: string, login: string, password: string) => void;
+  onClearProfilePassword: (profileId: string) => void;
   onSelectTheme: (themeId: string) => void;
   onOpenThemesTab: () => void;
   onUpdateSettings: (partial: Partial<AppSettings>) => void;
-  onResetDemo: () => void;
+  onConnectGoogle: () => void;
+  onDisconnectGoogle: () => void;
+  onJoinGroupCode: (code: string) => Promise<{ ok: boolean; error?: string }>;
+  onResetLocalData: () => void;
+  onReopenProfilePicker?: () => void;
 }
 
 const RANGE_OPTIONS = [
@@ -61,57 +101,193 @@ const QUICK_THEME_IDS = [
 ];
 
 export function ProfileSettingsView({
-  profiles,
+  ownedProfiles,
   activeProfile,
+  schoolDirectory,
   activeTheme,
   device,
+  cloudMeta,
+  cloudStatus,
+  cloudError,
   onSwitchProfile,
   onCreateProfile,
   onDeleteProfile,
-  onAddMissingFamily,
   onUpdateProfileMeta,
+  onSetProfileCredentials,
+  onClearProfilePassword,
   onSelectTheme,
   onOpenThemesTab,
   onUpdateSettings,
-  onResetDemo,
+  onConnectGoogle,
+  onDisconnectGoogle,
+  onJoinGroupCode,
+  onResetLocalData,
+  onReopenProfilePicker,
 }: ProfileSettingsViewProps) {
   const [newName, setNewName] = useState('');
+  const [newSchool, setNewSchool] = useState('');
+  const [newClass, setNewClass] = useState('');
+  const [newDupBlocked, setNewDupBlocked] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
   const [newAvatarPrompt, setNewAvatarPrompt] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
+
   const [editName, setEditName] = useState(activeProfile.name);
+  const [editSchool, setEditSchool] = useState(activeProfile.schoolName ?? '');
+  const [editClass, setEditClass] = useState(activeProfile.className ?? '');
+  const [editDupBlocked, setEditDupBlocked] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
+
+  const [loginEdit, setLoginEdit] = useState(
+    activeProfile.login || normalizeLogin(activeProfile.name)
+  );
+  const [passwordEdit, setPasswordEdit] = useState('');
+  const [credNotice, setCredNotice] = useState<string | null>(null);
+  const [credError, setCredError] = useState<string | null>(null);
+
+  const [unlockTargetId, setUnlockTargetId] = useState<string | null>(null);
+  const [unlockPwdInput, setUnlockPwdInput] = useState('');
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [joinCodeMessage, setJoinCodeMessage] = useState<string | null>(null);
+  const [joinCodeError, setJoinCodeError] = useState<string | null>(null);
+  const [joiningCode, setJoiningCode] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     setEditName(activeProfile.name);
-  }, [activeProfile.id, activeProfile.name]);
+    setEditSchool(activeProfile.schoolName ?? '');
+    setEditClass(activeProfile.className ?? '');
+    setLoginEdit(activeProfile.login || normalizeLogin(activeProfile.name));
+    setPasswordEdit('');
+    setCredNotice(null);
+    setCredError(null);
+    setUnlockTargetId(null);
+    setUnlockPwdInput('');
+    setUnlockError(null);
+  }, [
+    activeProfile.id,
+    activeProfile.name,
+    activeProfile.schoolName,
+    activeProfile.className,
+    activeProfile.login,
+  ]);
 
   const levelInfo = computeUserLevel(activeProfile.xp);
+  const activeHasPassword = hasAccountPassword(activeProfile);
 
-  const missingFamilyMembers = STARTER_FAMILY_TEMPLATES.filter(
-    (name) => !profiles.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())
-  );
-
-  const handleSaveName = (e: React.FormEvent) => {
+  const handleSaveProfileDetails = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editName.trim()) return;
-    onUpdateProfileMeta(editName.trim(), activeProfile.avatarId, activeProfile.customAvatarSpec);
+    if (!editName.trim() || editDupBlocked) return;
+    onUpdateProfileMeta(
+      editName.trim(),
+      activeProfile.avatarId,
+      activeProfile.customAvatarSpec,
+      editSchool,
+      editClass
+    );
     setSavedNotice(true);
     window.setTimeout(() => setSavedNotice(false), 1800);
   };
 
+  const handleSaveCredentials = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCredError(null);
+    const trimmedPwd = passwordEdit.trim();
+    if (trimmedPwd.length > 0 && trimmedPwd.length < 3) {
+      setCredError('Hasło lub PIN musi mieć minimum 3 znaki.');
+      return;
+    }
+    if (!activeHasPassword && trimmedPwd.length === 0) {
+      setCredError('Wpisz hasło (min. 3 znaki), aby zabezpieczyć to konto.');
+      return;
+    }
+    onSetProfileCredentials(
+      activeProfile.id,
+      loginEdit || activeProfile.name,
+      trimmedPwd
+    );
+    setPasswordEdit('');
+    setCredNotice(
+      trimmedPwd
+        ? 'Zapisano login i hasło. Twoje konto jest chronione!'
+        : 'Zaktualizowano login konta.'
+    );
+    window.setTimeout(() => setCredNotice(null), 2400);
+  };
+
+  const handleRequestSwitch = (target: UserProfile) => {
+    if (target.id === activeProfile.id) return;
+    if (!hasAccountPassword(target)) {
+      onSwitchProfile(target.id);
+      return;
+    }
+    setUnlockTargetId(target.id);
+    setUnlockPwdInput('');
+    setUnlockError(null);
+  };
+
+  const handleUnlockTargetSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = ownedProfiles.find((p) => p.id === unlockTargetId);
+    if (!target) return;
+    if (!verifyAccountCredentials(target, unlockPwdInput)) {
+      setUnlockError('Nieprawidłowe hasło dla tego konta.');
+      return;
+    }
+    setUnlockTargetId(null);
+    setUnlockPwdInput('');
+    setUnlockError(null);
+    onSwitchProfile(target.id);
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim()) return;
-    if (newAvatarPrompt.trim()) {
-      const customSpec = parseAvatarPrompt(newAvatarPrompt.trim());
-      onCreateProfile(newName.trim(), 'custom', customSpec);
-    } else {
-      const spec = parseAvatarPrompt(newName.trim());
-      onCreateProfile(newName.trim(), 'custom', spec);
-    }
+    if (!newName.trim() || newDupBlocked) return;
+    const customSpec = parseAvatarPrompt(
+      newAvatarPrompt.trim() ? newAvatarPrompt.trim() : newName.trim()
+    );
+    onCreateProfile(
+      newName.trim(),
+      'custom',
+      customSpec,
+      normalizeLogin(newName.trim()),
+      newPassword.trim() || undefined,
+      newSchool.trim() || undefined,
+      newClass.trim() || undefined
+    );
     setNewName('');
+    setNewSchool('');
+    setNewClass('');
+    setNewDupBlocked(false);
+    setNewPassword('');
     setNewAvatarPrompt('');
     setShowNewForm(false);
+  };
+
+  const handleCopyJoinCode = () => {
+    if (!cloudMeta?.joinCode) return;
+    void navigator.clipboard?.writeText(cloudMeta.joinCode);
+    setCopiedCode(true);
+    window.setTimeout(() => setCopiedCode(false), 1800);
+  };
+
+  const handleJoinCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setJoinCodeError(null);
+    setJoinCodeMessage(null);
+    setJoiningCode(true);
+    const res = await onJoinGroupCode(joinCodeInput);
+    setJoiningCode(false);
+    if (res.ok) {
+      setJoinCodeInput('');
+      setJoinCodeMessage('Dołączono do grupy / klasy! Wyniki synchronizują się na żywo.');
+    } else {
+      setJoinCodeError(res.error ?? 'Nie udało się dołączyć tym kodem.');
+    }
   };
 
   const DeviceIcon =
@@ -122,24 +298,29 @@ export function ProfileSettingsView({
       : Monitor;
 
   const quickThemes = PRESET_THEMES.filter((t) => QUICK_THEME_IDS.includes(t.id));
+  const schoolClassDisplay = [activeProfile.schoolName, activeProfile.className]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-8">
       <div>
         <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)]">
-          Konta Rodzinne, Awatar i Ustawienia
+          Konto Użytkownika, Szkoła i Synchronizacja
         </h1>
-        <p className="mt-1 text-sm sm:text-base text-[var(--th-text-muted)]">
-          Każdy gracz (Ola, Mama, Tata, Natalka i nowi uczestnicy) ma własną nazwę, awatar, ulubiony szablon kolorów i osobiste wyniki.
+        <p className="mt-1 text-xs sm:text-base text-[var(--th-text-muted)]">
+          Zarządzaj swoim kontem, nazwą szkoły i klasy, hasłem, kolorami oraz synchronizacją między telefonem i komputerem.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left: User Account & Family Switcher */}
-        <section className="lg:col-span-6 bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
+        {/* Left: User Account, School/Class, Cloud Sync, Credentials & Owned Accounts */}
+        <section className="lg:col-span-6 bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 space-y-5">
           <div className="flex items-center justify-between gap-3 pb-4 border-b border-[var(--th-border)]">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-[var(--th-text-muted)]">Aktywne konto</p>
+              <p className="text-xs font-semibold text-[var(--th-text-muted)]">
+                Aktywny użytkownik{schoolClassDisplay ? ` · ${schoolClassDisplay}` : ''}
+              </p>
               <h2 className="font-display text-xl font-bold text-[var(--th-text)] truncate">
                 {activeProfile.name} · Poziom {levelInfo.level}
               </h2>
@@ -156,38 +337,202 @@ export function ProfileSettingsView({
             />
           </div>
 
-          {/* Edit Current Profile Name */}
-          <form onSubmit={handleSaveName} className="space-y-3">
+          {/* Edit Current User Name, School & Class */}
+          <form onSubmit={handleSaveProfileDetails} className="space-y-3">
+            <div className="flex items-center gap-1.5">
+              <GraduationCap className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
+              <h3 className="font-display text-base font-bold text-[var(--th-text)]">
+                Dane ucznia / gracza
+              </h3>
+            </div>
+
             <div>
               <label
                 htmlFor="profile-name-input"
-                className="block text-sm font-bold text-[var(--th-text)] mb-1.5"
+                className="block text-xs font-bold text-[var(--th-text)] mb-1"
               >
-                Zmień swoją nazwę lub pseudonim
+                Nazwa użytkownika lub imię
               </label>
-              <div className="flex gap-2">
-                <input
-                  id="profile-name-input"
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  maxLength={24}
-                  className="flex-1 min-h-[44px] px-3.5 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] font-medium focus:outline-2 focus:outline-[var(--th-primary)]"
-                />
-                <button
-                  type="submit"
-                  className="min-h-[44px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] border-b-3 border-[var(--th-primary-dark)] text-sm font-bold cursor-pointer"
-                >
-                  Zapisz
-                </button>
-              </div>
-              {savedNotice && (
-                <p className="mt-1.5 text-xs font-semibold text-[var(--th-primary)]">
-                  Zaktualizowano nazwę konta.
+              <input
+                id="profile-name-input"
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                maxLength={24}
+                className="w-full min-h-[42px] px-3.5 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] text-sm font-medium focus:outline-2 focus:outline-[var(--th-primary)]"
+              />
+            </div>
+
+            <SchoolClassSelector
+              directory={schoolDirectory}
+              schoolValue={editSchool}
+              classValue={editClass}
+              onChangeSchool={setEditSchool}
+              onChangeClass={setEditClass}
+              idPrefix="edit-profile"
+              onDuplicateBlockChange={setEditDupBlocked}
+            />
+
+            <div className="flex items-center justify-between gap-2">
+              {savedNotice ? (
+                <p className="text-xs font-semibold text-[var(--th-primary)]">
+                  Zapisano dane użytkownika, szkoły i klasy.
                 </p>
+              ) : (
+                <span className="text-[11px] text-[var(--th-text-muted)]">
+                  Wybierz istniejącą szkołę i klasę lub dodaj nową, aby zbierać punkty drużyny.
+                </span>
               )}
+              <button
+                type="submit"
+                disabled={editDupBlocked}
+                className="min-h-[40px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] border-b-3 border-[var(--th-primary-dark)] text-sm font-bold disabled:opacity-50 cursor-pointer shrink-0"
+              >
+                Zapisz dane
+              </button>
             </div>
           </form>
+
+          {/* Cloud Sync & Group / Class Code */}
+          <div
+            className="pt-4 border-t border-[var(--th-border)] space-y-3"
+            data-testid="cloud-sync-card"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <Cloud className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
+                <h3 className="font-display text-base font-bold text-[var(--th-text)]">
+                  Synchronizacja w chmurze i Grupa / Klasa
+                </h3>
+              </div>
+              <span className="text-[11px] font-bold text-[var(--th-primary)]">
+                {cloudStatus === 'synced'
+                  ? 'Zsynchronizowano'
+                  : cloudStatus === 'connecting'
+                  ? 'Łączenie...'
+                  : 'Tylko lokalnie'}
+              </span>
+            </div>
+
+            {!cloudMeta ? (
+              <div className="bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-3.5 space-y-2.5">
+                <p className="text-xs text-[var(--th-text-muted)]">
+                  Połącz z Google, aby mieć te same wyniki na telefonie i komputerze oraz zapraszać znajomych z klasy lub szkoły kodem.
+                </p>
+                <button
+                  type="button"
+                  onClick={onConnectGoogle}
+                  disabled={cloudStatus === 'connecting'}
+                  className="w-full min-h-[42px] px-4 py-2 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-display font-bold text-xs sm:text-sm border-b-3 border-[var(--th-primary-dark)] cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Cloud className="w-4 h-4" aria-hidden="true" />
+                  <span>
+                    {cloudStatus === 'connecting'
+                      ? 'Łączenie z Google...'
+                      : 'Połącz z Google (Synchronizacja wyników)'}
+                  </span>
+                </button>
+                {cloudError && (
+                  <p className="text-xs font-bold text-red-500" role="alert">
+                    {cloudError}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] rounded-2xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-[var(--th-text)] truncate">
+                      Konto Google: {cloudMeta.displayName}
+                    </div>
+                    {cloudMeta.email && (
+                      <div className="text-[11px] text-[var(--th-text-muted)] truncate">
+                        {cloudMeta.email}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onDisconnectGoogle}
+                    className="text-xs font-bold text-[var(--th-text-muted)] hover:text-red-500 inline-flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Wyloguj</span>
+                  </button>
+                </div>
+
+                {/* Invite Code */}
+                <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-xl p-2.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-[var(--th-text-muted)]">
+                      Twój Kod Grupy / Klasy (podaj znajomym lub na drugim urządzeniu)
+                    </div>
+                    <div className="font-mono text-base font-extrabold text-[var(--th-primary)] tracking-wider">
+                      {cloudMeta.joinCode}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyJoinCode}
+                    className="min-h-[36px] px-3 rounded-xl bg-[var(--th-surface-muted)] border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {copiedCode ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-[var(--th-primary)]" aria-hidden="true" />
+                        <span>Skopiowano</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Kopiuj</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Join Another Class / Group Code */}
+                <form onSubmit={handleJoinCodeSubmit} className="space-y-2">
+                  <label
+                    htmlFor="join-group-code-input"
+                    className="block text-xs font-bold text-[var(--th-text)]"
+                  >
+                    Masz kod innej klasy, szkoły lub grupy? Wpisz go tutaj:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="join-group-code-input"
+                      type="text"
+                      value={joinCodeInput}
+                      onChange={(e) => {
+                        setJoinCodeInput(e.target.value.toUpperCase());
+                        setJoinCodeError(null);
+                      }}
+                      placeholder="np. MT-ABCD"
+                      maxLength={16}
+                      className="flex-1 min-h-[40px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] font-mono text-sm font-bold uppercase"
+                    />
+                    <button
+                      type="submit"
+                      disabled={joiningCode || !joinCodeInput.trim()}
+                      className="min-h-[40px] px-3.5 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      {joiningCode ? 'Łączę...' : 'Dołącz'}
+                    </button>
+                  </div>
+                  {joinCodeError && (
+                    <p className="text-xs font-bold text-red-500" role="alert">
+                      {joinCodeError}
+                    </p>
+                  )}
+                  {joinCodeMessage && (
+                    <p className="text-xs font-semibold text-[var(--th-primary)]">
+                      {joinCodeMessage}
+                    </p>
+                  )}
+                </form>
+              </div>
+            )}
+          </div>
 
           {/* Personal Theme Template Quick Switcher */}
           <div className="pt-4 border-t border-[var(--th-border)] space-y-2.5">
@@ -235,23 +580,111 @@ export function ProfileSettingsView({
             </div>
           </div>
 
-          {/* Switch Profile or Create New Family Member */}
+          {/* Login & Password Account Protection */}
+          <form
+            onSubmit={handleSaveCredentials}
+            className="pt-4 border-t border-[var(--th-border)] space-y-3"
+            data-testid="account-security-form"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                {activeHasPassword ? (
+                  <Lock className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
+                )}
+                <h3 className="font-display text-base font-bold text-[var(--th-text)]">
+                  Login i hasło (Ochrona wyników)
+                </h3>
+              </div>
+              {activeHasPassword && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearProfilePassword(activeProfile.id);
+                    setCredNotice('Usunięto blokadę hasłem dla tego konta.');
+                  }}
+                  className="text-xs font-bold text-[var(--th-text-muted)] hover:text-red-500 inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Unlock className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Usuń hasło</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label
+                  htmlFor="account-login-input"
+                  className="block text-xs font-bold text-[var(--th-text)] mb-1"
+                >
+                  Twój login
+                </label>
+                <input
+                  id="account-login-input"
+                  type="text"
+                  value={loginEdit}
+                  onChange={(e) => setLoginEdit(e.target.value)}
+                  maxLength={24}
+                  placeholder={normalizeLogin(activeProfile.name)}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] text-sm font-medium focus:outline-2 focus:outline-[var(--th-primary)]"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="account-password-input"
+                  className="block text-xs font-bold text-[var(--th-text)] mb-1"
+                >
+                  {activeHasPassword ? 'Nowe hasło / PIN (opcjonalnie)' : 'Ustaw hasło lub PIN'}
+                </label>
+                <input
+                  id="account-password-input"
+                  type="password"
+                  value={passwordEdit}
+                  onChange={(e) => {
+                    setPasswordEdit(e.target.value);
+                    setCredError(null);
+                  }}
+                  maxLength={32}
+                  placeholder={activeHasPassword ? '•••• (zmień)' : 'np. 1234'}
+                  className="w-full min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] text-sm font-medium focus:outline-2 focus:outline-[var(--th-primary)]"
+                />
+              </div>
+            </div>
+
+            {credError && (
+              <p className="text-xs font-bold text-red-500" role="alert">
+                {credError}
+              </p>
+            )}
+            {credNotice && (
+              <p className="text-xs font-semibold text-[var(--th-primary)]">{credNotice}</p>
+            )}
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-[var(--th-text-muted)]">
+                {activeHasPassword
+                  ? 'Konto zabezpieczone — nikt nie przełączy się tu bez hasła.'
+                  : 'Ustaw hasło, aby inni użytkownicy nie weszli na Twoje konto.'}
+              </span>
+              <button
+                type="submit"
+                className="min-h-[38px] px-3.5 rounded-xl bg-[var(--th-surface-muted)] hover:border-[var(--th-primary)] border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-[var(--th-primary)]" aria-hidden="true" />
+                <span>{activeHasPassword ? 'Zaktualizuj' : 'Zabezpiecz'}</span>
+              </button>
+            </div>
+          </form>
+
+          {/* Owned User Accounts on This Device */}
           <div className="pt-4 border-t border-[var(--th-border)] space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-display text-base font-bold text-[var(--th-text)] flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
-                <span>Konta rodzinne ({profiles.length})</span>
+                <span>Twoje konta na tym urządzeniu ({ownedProfiles.length})</span>
               </h3>
-              <div className="flex items-center gap-3">
-                {missingFamilyMembers.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={onAddMissingFamily}
-                    className="text-xs font-bold text-[var(--th-primary)] hover:underline cursor-pointer"
-                  >
-                    + Dodaj rodzinę ({missingFamilyMembers.join(', ')})
-                  </button>
-                )}
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setShowNewForm((v) => !v)}
@@ -260,61 +693,120 @@ export function ProfileSettingsView({
                   <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Nowe konto</span>
                 </button>
+                {onReopenProfilePicker && (
+                  <button
+                    type="button"
+                    onClick={onReopenProfilePicker}
+                    className="text-xs font-bold text-[var(--th-text-muted)] hover:text-[var(--th-text)] hover:underline cursor-pointer"
+                  >
+                    Ekran startowy kont
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
-              {profiles.map((p) => {
+              {ownedProfiles.map((p) => {
                 const isCurrent = p.id === activeProfile.id;
+                const isProtected = hasAccountPassword(p);
+                const isUnlocking = unlockTargetId === p.id;
+                const cohort = [p.schoolName, p.className].filter(Boolean).join(' · ');
                 return (
                   <div
                     key={p.id}
-                    className={`w-full min-h-[54px] px-3 py-2 rounded-xl border flex items-center justify-between gap-2 transition-colors ${
+                    className={`w-full px-3 py-2 rounded-xl border transition-colors ${
                       isCurrent
                         ? 'bg-[var(--th-soft-tint)] border-[var(--th-primary)] text-[var(--th-text)]'
                         : 'bg-[var(--th-surface-muted)] border-[var(--th-border)] text-[var(--th-text)]'
                     }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onSwitchProfile(p.id);
-                        setEditName(p.name);
-                      }}
-                      className="flex-1 flex items-center gap-3 text-left cursor-pointer min-w-0"
-                    >
-                      <AvatarDisplay
-                        avatarId={p.avatarId}
-                        customSpec={p.customAvatarSpec}
-                        name={p.name}
-                        sizeClass="w-9 h-9"
-                      />
-                      <div className="min-w-0">
-                        <div className="font-bold text-sm truncate">{p.name}</div>
-                        <div className="text-xs text-[var(--th-text-muted)] tabular-nums">
-                          {p.xp} XP · {p.sessions.length} serii · {p.earnedBadges.length} odznak
+                    <div className="min-h-[44px] flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRequestSwitch(p)}
+                        className="flex-1 flex items-center gap-3 text-left cursor-pointer min-w-0"
+                      >
+                        <AvatarDisplay
+                          avatarId={p.avatarId}
+                          customSpec={p.customAvatarSpec}
+                          name={p.name}
+                          sizeClass="w-9 h-9"
+                        />
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm truncate inline-flex items-center gap-1.5">
+                            <span>{p.name}</span>
+                            {isProtected && (
+                              <Lock
+                                className="w-3.5 h-3.5 text-[var(--th-primary)] shrink-0"
+                                aria-label="Wymaga hasła"
+                              />
+                            )}
+                          </div>
+                          <div className="text-xs text-[var(--th-text-muted)] tabular-nums truncate">
+                            {cohort ? `${cohort} · ` : ''}
+                            {p.xp} XP · {p.sessions.length} serii
+                          </div>
                         </div>
-                      </div>
-                    </button>
+                      </button>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      {isCurrent && (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-[var(--th-primary)]">
-                          <Check className="w-4 h-4" aria-hidden="true" />
-                          Aktywny
-                        </span>
-                      )}
-                      {profiles.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => onDeleteProfile(p.id)}
-                          aria-label={`Usuń konto ${p.name}`}
-                          className="p-2 rounded-lg text-[var(--th-text-muted)] hover:text-red-500 cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" aria-hidden="true" />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isCurrent && (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-[var(--th-primary)]">
+                            <Check className="w-4 h-4" aria-hidden="true" />
+                            Aktywny
+                          </span>
+                        )}
+                        {ownedProfiles.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteProfile(p.id)}
+                            aria-label={`Usuń konto ${p.name}`}
+                            className="p-2 rounded-lg text-[var(--th-text-muted)] hover:text-red-500 cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {isUnlocking && (
+                      <form
+                        onSubmit={handleUnlockTargetSubmit}
+                        className="mt-2 pt-2 border-t border-[var(--th-border)] space-y-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="password"
+                            value={unlockPwdInput}
+                            onChange={(e) => {
+                              setUnlockPwdInput(e.target.value);
+                              setUnlockError(null);
+                            }}
+                            placeholder={`Wpisz hasło dla ${p.name}...`}
+                            aria-label={`Hasło dla ${p.name}`}
+                            className="flex-1 min-h-[38px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] text-xs font-semibold"
+                          />
+                          <button
+                            type="submit"
+                            className="min-h-[38px] px-3 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold cursor-pointer"
+                          >
+                            Wejdź
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUnlockTargetId(null)}
+                            className="min-h-[38px] px-2 text-xs font-semibold text-[var(--th-text-muted)] cursor-pointer"
+                          >
+                            Anuluj
+                          </button>
+                        </div>
+                        {unlockError && (
+                          <p className="text-xs font-bold text-red-500" role="alert">
+                            {unlockError}
+                          </p>
+                        )}
+                      </form>
+                    )}
                   </div>
                 );
               })}
@@ -323,25 +815,53 @@ export function ProfileSettingsView({
             {showNewForm && (
               <form
                 onSubmit={handleCreate}
-                className="p-4 rounded-2xl bg-[var(--th-surface-muted)] border border-[var(--th-border)] space-y-3"
+                className="p-3.5 sm:p-4 rounded-2xl bg-[var(--th-surface-muted)] border border-[var(--th-border)] space-y-3"
               >
-                <div>
-                  <label
-                    htmlFor="new-profile-input"
-                    className="block text-xs font-bold text-[var(--th-text)] mb-1"
-                  >
-                    Imię nowego członka rodziny lub ucznia
-                  </label>
-                  <input
-                    id="new-profile-input"
-                    type="text"
-                    placeholder="np. Babcia, Dziadek, Tomek"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    maxLength={24}
-                    className="w-full min-h-[44px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] text-sm"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label
+                      htmlFor="new-profile-input"
+                      className="block text-xs font-bold text-[var(--th-text)] mb-1"
+                    >
+                      Nazwa nowego użytkownika
+                    </label>
+                    <input
+                      id="new-profile-input"
+                      type="text"
+                      placeholder="np. Kuba, Zosia"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      maxLength={24}
+                      className="w-full min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="new-profile-password"
+                      className="block text-xs font-bold text-[var(--th-text)] mb-1"
+                    >
+                      Hasło / PIN (opcjonalnie)
+                    </label>
+                    <input
+                      id="new-profile-password"
+                      type="password"
+                      placeholder="np. 1234"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      maxLength={32}
+                      className="w-full min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] text-sm"
+                    />
+                  </div>
                 </div>
+                <SchoolClassSelector
+                  directory={schoolDirectory}
+                  schoolValue={newSchool}
+                  classValue={newClass}
+                  onChangeSchool={setNewSchool}
+                  onChangeClass={setNewClass}
+                  idPrefix="settings-new"
+                  onDuplicateBlockChange={setNewDupBlocked}
+                />
                 <div>
                   <label
                     htmlFor="new-profile-avatar-prompt"
@@ -362,7 +882,8 @@ export function ProfileSettingsView({
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    className="min-h-[44px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] border-b-3 border-[var(--th-primary-dark)] text-sm font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                    disabled={newDupBlocked || !newName.trim()}
+                    className="min-h-[44px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] border-b-3 border-[var(--th-primary-dark)] text-sm font-bold inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" aria-hidden="true" />
                     <span>Utwórz konto</span>
@@ -374,7 +895,7 @@ export function ProfileSettingsView({
         </section>
 
         {/* Right: Expandable Range & Ergonomic Settings */}
-        <section className="lg:col-span-6 bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6 space-y-6">
+        <section className="lg:col-span-6 bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 space-y-5 sm:space-y-6">
           <div className="flex items-center gap-2.5 pb-4 border-b border-[var(--th-border)]">
             <Sliders className="w-5 h-5 text-[var(--th-primary)]" aria-hidden="true" />
             <div>
@@ -513,15 +1034,39 @@ export function ProfileSettingsView({
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end">
-            <button
-              type="button"
-              onClick={onResetDemo}
-              className="text-xs font-semibold text-[var(--th-text-muted)] hover:text-[var(--th-text)] inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Przywróć startowy zestaw rodziny (Ola, Mama, Tata, Natalka)</span>
-            </button>
+          {/* Clean Local Reset with Inline 2-step confirmation */}
+          <div className="pt-2 flex flex-wrap items-center justify-end gap-3">
+            {!confirmReset ? (
+              <button
+                type="button"
+                onClick={() => setConfirmReset(true)}
+                className="text-xs font-semibold text-[var(--th-text-muted)] hover:text-red-500 inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Wyczyść dane lokalne na tym urządzeniu</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-semibold text-[var(--th-text-muted)]">Na pewno?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmReset(false);
+                    onResetLocalData();
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-red-600 text-white font-bold cursor-pointer"
+                >
+                  Tak, wyczyść
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReset(false)}
+                  className="px-2 py-1 rounded-lg bg-[var(--th-surface-muted)] border border-[var(--th-border)] font-semibold cursor-pointer"
+                >
+                  Anuluj
+                </button>
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -553,10 +1098,22 @@ export function ProfileSettingsView({
           currentAvatarId={activeProfile.avatarId}
           currentCustomSpec={activeProfile.customAvatarSpec}
           onSelectPresetAvatar={(avatarId) =>
-            onUpdateProfileMeta(activeProfile.name, avatarId, activeProfile.customAvatarSpec)
+            onUpdateProfileMeta(
+              activeProfile.name,
+              avatarId,
+              activeProfile.customAvatarSpec,
+              activeProfile.schoolName,
+              activeProfile.className
+            )
           }
           onSaveCustomAvatar={(spec) =>
-            onUpdateProfileMeta(activeProfile.name, 'custom', spec)
+            onUpdateProfileMeta(
+              activeProfile.name,
+              'custom',
+              spec,
+              activeProfile.schoolName,
+              activeProfile.className
+            )
           }
         />
       </section>
