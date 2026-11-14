@@ -30,12 +30,15 @@ import {
 import type { CloudSyncStatus } from '../store/useAppStore';
 import type { ActiveSeriesConfig, FactMemory, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
+import { GroupRivalry } from './GroupRivalry';
 import { ProgressTrendChart } from './ProgressTrendChart';
 
 interface StatsViewProps {
   profile: UserProfile;
   profiles: UserProfile[];
   trendProfiles?: UserProfile[];
+  /** Nazwa wybranej grupy — włącza sekcję „Wyzwania w grupie”. */
+  groupName?: string;
   cloudStatus?: CloudSyncStatus;
   cloudError?: string | null;
   onConnectGoogle?: () => void;
@@ -55,6 +58,7 @@ export function StatsView({
   profile,
   profiles,
   trendProfiles,
+  groupName,
   cloudStatus = 'offline',
   cloudError = null,
   onConnectGoogle,
@@ -332,6 +336,8 @@ export function StatsView({
           })}
         </div>
       </section>
+
+      {groupName && <GroupRivalry profiles={profiles} meId={profile.id} groupName={groupName} />}
 
       {/* Inter-Class & Inter-School Competition Standings */}
       {false && (familySummary.classStandings.length > 0 || familySummary.schoolStandings.length > 0) && (

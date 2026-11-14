@@ -753,11 +753,11 @@ export function ExerciseArena({
       </div>
 
       {/* Main Responsive Stage: 2 Columns on Desktop/Landscape Tablet, Stacked on Phone */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 [@media(max-height:720px)]:gap-2.5 sm:gap-6 items-start">
         {/* Left / Top Stage: Equation Card + Visual Hint */}
         <div className="lg:col-span-7 flex flex-col gap-3 sm:gap-4">
           <div
-            className={`relative bg-[var(--th-surface)] border rounded-3xl p-5 sm:p-8 shadow-sm transition-colors overflow-hidden ${
+            className={`relative bg-[var(--th-surface)] border rounded-3xl p-5 sm:p-8 [@media(max-height:720px)]:p-3.5 shadow-sm transition-colors overflow-hidden ${
               shakeWrong
                 ? 'animate-shake border-red-500'
                 : isTimeWarning
@@ -863,7 +863,7 @@ export function ExerciseArena({
                 Ma stałą wysokość, więc nic nie przesuwa działania ani klawiatury. */}
             <div
               data-testid="hint-slot"
-              className={`relative mt-2 sm:mt-4 h-[124px] sm:h-[140px] rounded-2xl border px-3 sm:px-4 py-2 sm:py-3 overflow-hidden transition-colors ${
+              className={`relative mt-2 sm:mt-4 h-[124px] sm:h-[140px] [@media(max-height:720px)]:h-[100px] [@media(max-height:720px)]:mt-1 rounded-2xl border px-3 sm:px-4 py-2 sm:py-3 overflow-hidden transition-colors ${
                 feedback
                   ? feedback.isCorrect
                     ? isDark

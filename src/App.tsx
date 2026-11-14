@@ -304,6 +304,7 @@ export default function App() {
                 profile={activeProfile}
                 profiles={competitionProfiles}
                 trendProfiles={selectedCircleId ? competitionProfiles : profiles}
+                groupName={circles.find((c) => c.id === selectedCircleId)?.name}
                 cloudStatus={cloudStatus}
                 cloudError={cloudError}
                 isDark={activeTheme.tokens.isDark}
