@@ -18,6 +18,14 @@ export interface ReleaseNote {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: '2026-11-14d',
+    date: '14 listopada 2026',
+    title: 'Wygodniej na tablecie',
+    items: [
+      { emoji: '📱', text: 'Na iPadzie i tablecie gra wypełnia cały ekran: duże działanie i duże klawisze — poziomo i pionowo.' },
+    ],
+  },
+  {
     id: '2026-11-14c',
     date: '14 listopada 2026',
     title: 'Cel na dziś i rekordy',

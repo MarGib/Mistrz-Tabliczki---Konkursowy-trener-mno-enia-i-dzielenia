@@ -69,6 +69,21 @@ interface ExerciseArenaProps {
   pastSessions?: SessionRecord[];
 }
 
+/**
+ * Układ gry na większych ekranach:
+ *  'wide' — poziomo, min. 1000 × 600 (iPad poziomo, laptop): działanie po lewej, klawiatura po prawej na całą wysokość,
+ *  'tall' — pionowo, min. 700 × 900 (iPad pionowo): działanie u góry, klawiatura wypełnia dół.
+ */
+type StageMode = 'wide' | 'tall' | null;
+function isWideStage(): StageMode {
+  if (typeof window === 'undefined') return null;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  if (w >= 1000 && h >= 600 && w / h >= 1.15) return 'wide';
+  if (w >= 700 && h >= 900 && h / w >= 1.15) return 'tall';
+  return null;
+}
+
 function formatSeconds(ms: number): string {
   return (ms / 1000).toFixed(1).replace('.', ',');
 }
@@ -132,6 +147,17 @@ export function ExerciseArena({
 
   const currentProblem = problems[currentIndex];
   const isCompactPhone = device.category === 'telefon';
+  // Szeroki, poziomy ekran (iPad poziomo, komputer): gra wypełnia całą wysokość, klawiatura rośnie.
+  const [wideStage, setWideStage] = useState(() => isWideStage());
+  useEffect(() => {
+    const onResize = () => setWideStage(isWideStage());
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
   const musicEnabled = settings.musicEnabled ?? true;
 
   // Soft pace countdown target per task (in seconds)
@@ -785,6 +811,7 @@ export function ExerciseArena({
   return (
     <div
       className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6"
+      data-arena-wide={wideStage && !isFinished ? (wideStage === 'wide' ? '1' : 'tall') : undefined}
       data-testid="exercise-arena"
     >
       {/* Top Arena Progress, Audio Controls & Exit Bar */}
@@ -869,11 +896,11 @@ export function ExerciseArena({
       </div>
 
       {/* Main Responsive Stage: 2 Columns on Desktop/Landscape Tablet, Stacked on Phone */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 [@media(max-height:720px)]:gap-2.5 sm:gap-6 items-start">
+      <div className="arena-stage grid grid-cols-1 lg:grid-cols-12 gap-4 [@media(max-height:720px)]:gap-2.5 sm:gap-6 items-start">
         {/* Left / Top Stage: Equation Card + Visual Hint */}
-        <div className="lg:col-span-7 flex flex-col gap-3 sm:gap-4">
+        <div className="arena-left lg:col-span-7 flex flex-col gap-3 sm:gap-4">
           <div
-            className={`relative bg-[var(--th-surface)] border rounded-3xl p-5 sm:p-8 [@media(max-height:720px)]:p-3.5 shadow-sm transition-colors overflow-hidden ${
+            className={`arena-card relative bg-[var(--th-surface)] border rounded-3xl p-5 sm:p-8 [@media(max-height:720px)]:p-3.5 shadow-sm transition-colors overflow-hidden ${
               shakeWrong
                 ? 'animate-shake border-red-500'
                 : isTimeWarning
@@ -944,20 +971,20 @@ export function ExerciseArena({
             )}
 
             {/* Big Equation Display */}
-            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-3 pb-1 sm:pt-8 sm:pb-6">
+            <div className="arena-eq-row flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-3 pb-1 sm:pt-8 sm:pb-6">
               <span
-                className="font-display text-4xl sm:text-6xl font-extrabold tracking-tight text-[var(--th-text)] tabular-nums"
+                className="arena-eq font-display text-4xl sm:text-6xl font-extrabold tracking-tight text-[var(--th-text)] tabular-nums"
                 data-testid="equation-text"
               >
                 {currentProblem?.display}
               </span>
-              <span className="font-display text-4xl sm:text-6xl font-bold text-[var(--th-text-muted)]">
+              <span className="arena-eq font-display text-4xl sm:text-6xl font-bold text-[var(--th-text-muted)]">
                 =
               </span>
               <div
                 aria-label="Wpisana odpowiedź"
                 data-testid="answer-display"
-                className={`min-w-[92px] sm:min-w-[124px] h-16 sm:h-20 px-4 rounded-2xl border-2 flex items-center justify-center font-display text-4xl sm:text-5xl font-extrabold tabular-nums transition-colors ${
+                className={`arena-answer min-w-[92px] sm:min-w-[124px] h-16 sm:h-20 px-4 rounded-2xl border-2 flex items-center justify-center font-display text-4xl sm:text-5xl font-extrabold tabular-nums transition-colors ${
                   feedback
                     ? feedback.isCorrect
                       ? isDark
@@ -979,7 +1006,7 @@ export function ExerciseArena({
                 Ma stałą wysokość, więc nic nie przesuwa działania ani klawiatury. */}
             <div
               data-testid="hint-slot"
-              className={`relative mt-2 sm:mt-4 h-[124px] sm:h-[140px] [@media(max-height:720px)]:h-[100px] [@media(max-height:720px)]:mt-1 rounded-2xl border px-3 sm:px-4 py-2 sm:py-3 overflow-hidden transition-colors ${
+              className={`arena-hint relative mt-2 sm:mt-4 h-[124px] sm:h-[140px] [@media(max-height:720px)]:h-[100px] [@media(max-height:720px)]:mt-1 rounded-2xl border px-3 sm:px-4 py-2 sm:py-3 overflow-hidden transition-colors ${
                 feedback
                   ? feedback.isCorrect
                     ? isDark
@@ -1075,7 +1102,7 @@ export function ExerciseArena({
         </div>
 
         {/* Right / Bottom Stage: Calculator Keypad */}
-        <div className="lg:col-span-5">
+        <div className="arena-right lg:col-span-5">
           <CalculatorKeypad
             value={inputValue}
             onDigit={handleDigit}

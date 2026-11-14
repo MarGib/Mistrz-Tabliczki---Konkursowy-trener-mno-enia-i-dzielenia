@@ -70,3 +70,120 @@
     display: block;
   }
 }
+
+/* ── Gra na szerokim, poziomym ekranie (iPad poziomo, laptop): wypełnij wysokość ── */
+[data-arena-wide='1'] {
+  min-height: calc(100svh - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  max-width: 82rem;
+}
+[data-arena-wide='1'] .arena-stage {
+  flex: 1;
+  align-items: stretch;
+  min-height: 0;
+}
+[data-arena-wide='1'] .arena-left,
+[data-arena-wide='1'] .arena-right {
+  display: flex;
+  flex-direction: column;
+}
+[data-arena-wide='1'] .arena-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+[data-arena-wide='1'] .arena-eq-row {
+  flex: 1;
+  padding-top: 0;
+  padding-bottom: 0;
+  gap: 1.5rem;
+}
+[data-arena-wide='1'] .arena-eq {
+  font-size: clamp(4rem, 10vh, 7rem);
+  line-height: 1;
+}
+[data-arena-wide='1'] .arena-answer {
+  height: clamp(5.5rem, 13vh, 8.5rem);
+  min-width: clamp(8rem, 16vh, 12rem);
+  font-size: clamp(3.5rem, 9vh, 6rem);
+}
+[data-arena-wide='1'] .arena-hint {
+  height: clamp(150px, 24vh, 230px);
+}
+[data-arena-wide='1'] .kp {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+[data-arena-wide='1'] .kp-grid {
+  flex: 1;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 0.875rem;
+}
+[data-arena-wide='1'] .kp-key {
+  height: auto;
+  min-height: 64px;
+  font-size: clamp(2rem, 5.5vh, 3.25rem);
+}
+[data-arena-wide='1'] .kp-key svg {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+[data-arena-wide='1'] .kp-submit {
+  height: clamp(4.5rem, 11vh, 6rem);
+  font-size: 1.5rem;
+  margin-top: 0.875rem;
+}
+
+/* ── iPad pionowo: działanie u góry, klawiatura wypełnia resztę ekranu ── */
+[data-arena-wide='tall'] {
+  min-height: calc(100svh - 1.5rem);
+  display: flex;
+  flex-direction: column;
+}
+[data-arena-wide='tall'] .arena-stage {
+  flex: 1;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: stretch;
+}
+[data-arena-wide='tall'] .arena-eq {
+  font-size: clamp(3.75rem, 7vh, 5.5rem);
+  line-height: 1;
+}
+[data-arena-wide='tall'] .arena-answer {
+  height: clamp(5rem, 8vh, 7rem);
+  min-width: clamp(7.5rem, 13vh, 10rem);
+  font-size: clamp(3.25rem, 6vh, 4.75rem);
+}
+[data-arena-wide='tall'] .arena-right {
+  display: flex;
+  flex-direction: column;
+}
+[data-arena-wide='tall'] .kp {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+[data-arena-wide='tall'] .kp-grid {
+  flex: 1;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 0.875rem;
+}
+[data-arena-wide='tall'] .kp-key {
+  height: auto;
+  min-height: 64px;
+  font-size: clamp(2rem, 4.2vh, 3rem);
+}
+[data-arena-wide='tall'] .kp-key svg {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+[data-arena-wide='tall'] .kp-submit {
+  height: clamp(4.5rem, 8vh, 5.5rem);
+  font-size: 1.5rem;
+  margin-top: 0.875rem;
+}

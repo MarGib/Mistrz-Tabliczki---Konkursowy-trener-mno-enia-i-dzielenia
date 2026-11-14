@@ -75,7 +75,7 @@ export function CalculatorKeypad({
     holdTimer.current = null;
   };
 
-  const base = `${keyHeight} rounded-2xl border border-b-4 active:border-b-2 active:translate-y-[2px] active:scale-[0.97] transition-all duration-75 flex items-center justify-center select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--th-primary)] [touch-action:manipulation] [-webkit-tap-highlight-color:transparent]`;
+  const base = `kp-key ${keyHeight} rounded-2xl border border-b-4 active:border-b-2 active:translate-y-[2px] active:scale-[0.97] transition-all duration-75 flex items-center justify-center select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--th-primary)] [touch-action:manipulation] [-webkit-tap-highlight-color:transparent]`;
 
   const numberBtnClass = `${base} bg-[var(--th-key-bg)] hover:bg-[var(--th-key-hover)] active:bg-[var(--th-key-hover)] border-[var(--th-key-border)] font-display text-[1.65rem] font-bold text-[var(--th-key-text)] tabular-nums`;
 
@@ -89,12 +89,12 @@ export function CalculatorKeypad({
 
   return (
     <div
-      className="w-full bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-2.5 sm:p-4 select-none"
+      className="kp w-full bg-[var(--th-surface-muted)] border border-[var(--th-border)] rounded-2xl p-2.5 sm:p-4 select-none"
       role="group"
       aria-label="Klawiatura kalkulatora"
     >
       {/* Większe odstępy między klawiszami = mniej trafień w sąsiedni przycisk. */}
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+      <div className="kp-grid grid grid-cols-3 gap-2.5 sm:gap-3">
         {rows.flat().map((digit) => (
           <button
             key={digit}
@@ -158,7 +158,7 @@ export function CalculatorKeypad({
         type="button"
         disabled={disabled || value.length === 0}
         onClick={onSubmit}
-        className={`mt-3.5 sm:mt-4 w-full ${
+        className={`kp-submit mt-3.5 sm:mt-4 w-full ${
           compact ? 'h-[clamp(48px,7svh,56px)]' : 'h-14'
         } rounded-2xl [touch-action:manipulation] font-display text-base sm:text-lg font-bold tracking-wide flex items-center justify-center gap-2 transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--th-primary)] ${
           value.length > 0 && !disabled
