@@ -19,12 +19,19 @@ export function useHelp(): HelpApi {
 export function HelpProvider({ children }: { children: ReactNode }) {
   const [section, setSection] = useState<HelpSectionId | null>(null);
   const pushedRef = useRef(false);
+  const savedScrollRef = useRef(0);
+
+  const restoreScroll = () => {
+    const y = savedScrollRef.current;
+    window.requestAnimationFrame(() => window.scrollTo(0, y));
+  };
 
   useEffect(() => {
     const onPop = () => {
       if (pushedRef.current) {
         pushedRef.current = false;
         setSection(null);
+        restoreScroll();
       }
     };
     window.addEventListener('popstate', onPop);
@@ -32,6 +39,7 @@ export function HelpProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const openHelp = useCallback((id: HelpSectionId = 'start') => {
+    savedScrollRef.current = window.scrollY;
     if (!pushedRef.current) {
       try {
         window.history.pushState({ mtHelp: true }, '');
@@ -48,6 +56,7 @@ export function HelpProvider({ children }: { children: ReactNode }) {
       window.history.back(); // popstate zamknie nakładkę
     } else {
       setSection(null);
+      restoreScroll();
     }
   }, []);
 
