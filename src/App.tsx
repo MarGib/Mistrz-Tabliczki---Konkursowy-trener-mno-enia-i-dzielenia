@@ -20,6 +20,7 @@ import { classifyDevice } from './engine/deviceDetector';
 import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
+import { AdminPanel } from './components/AdminPanel';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
 
 function detectCurrentDevice(): DeviceProfile {
@@ -154,6 +155,17 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
+  const [adminOpen, setAdminOpen] = useState(() => window.location.hash === '#admin');
+  useEffect(() => {
+    const onHash = () => setAdminOpen(window.location.hash === '#admin');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  const closeAdmin = () => {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    setAdminOpen(false);
+  };
+
   const showWelcomeGate =
     (!hasSelectedProfile || ownedProfiles.length === 0) && !activeSeries;
 
@@ -183,6 +195,7 @@ export default function App() {
       data-active-theme={activeTheme.id}
       data-theme-dark={activeTheme.tokens.isDark ? 'true' : 'false'}
     >
+      {adminOpen && <AdminPanel onClose={closeAdmin} />}
       {showWelcomeGate ? (
         <FamilyWelcomeGate
           ownedProfiles={ownedProfiles}

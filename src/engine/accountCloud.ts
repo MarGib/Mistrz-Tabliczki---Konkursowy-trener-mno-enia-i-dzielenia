@@ -26,6 +26,7 @@ import {
 import {
   type Firestore,
   type Unsubscribe,
+  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -112,7 +113,7 @@ function toLegacyFirebasePassword(login: string, password: string): string {
  * Hasło techniczne nowej bazy — wyprowadzone ze skrótu hasła, który urządzenie i tak przechowuje.
  * Dzięki temu konto przechodzi do nowej bazy samo, bez ponownego wpisywania hasła przez dziecko.
  */
-function secretFromHash(passwordHash: string): string {
+export function secretFromHash(passwordHash: string): string {
   return `mt#h#${passwordHash}`;
 }
 
@@ -529,4 +530,34 @@ export function subscribeCirclePlayers(
     },
     (err) => onError?.(err)
   );
+}
+
+/* ------------------------------ Dziennik logowań ------------------------------ */
+
+/** Zapisuje próbę logowania (bez hasła) — widoczne tylko w panelu administratora. */
+export async function logLoginEvent(loginInput: string, ok: boolean, reason: string): Promise<void> {
+  try {
+    const { db } = getHandle('__events');
+    const ua = navigator.userAgent;
+    const device = /iPad/.test(ua)
+      ? 'iPad'
+      : /iPhone/.test(ua)
+      ? 'iPhone'
+      : /Android/.test(ua)
+      ? 'Android'
+      : /Mac OS X/.test(ua)
+      ? 'Mac'
+      : /Windows/.test(ua)
+      ? 'Windows'
+      : 'inne';
+    await addDoc(collection(db, 'loginEvents'), {
+      login: loginInput.trim().slice(0, 40),
+      ok,
+      reason: reason.slice(0, 60),
+      device,
+      at: serverTimestamp(),
+    });
+  } catch {
+    // dziennik nie może blokować logowania
+  }
 }

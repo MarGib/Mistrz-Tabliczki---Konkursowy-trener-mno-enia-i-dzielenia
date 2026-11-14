@@ -44,6 +44,7 @@ import type {
 import { AvatarDisplay } from './AvatarDisplay';
 import { PasswordInput } from './PasswordInput';
 import { InstallAppButton } from './InstallBanner';
+import { isAdminDevice } from '../engine/adminCloud';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { AvatarStudio } from './AvatarStudio';
 
@@ -361,6 +362,17 @@ export function ProfileSettingsView({
             </div>
           </div>
           <InstallAppButton />
+          {isAdminDevice() && (
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = 'admin';
+              }}
+              className="w-full min-h-[40px] rounded-xl border border-dashed border-[var(--th-border)] text-sm font-bold text-[var(--th-text)] hover:border-[var(--th-primary)] cursor-pointer"
+            >
+              🛡️ Panel administratora
+            </button>
+          )}
           {!activeProfile.cloudUid && (
             <p className="text-[11px] text-[var(--th-text-muted)] -mt-2">
               To konto nie jest jeszcze w chmurze — „Wyloguj” wróci do wyboru kont, a wyniki zostaną na tym urządzeniu.

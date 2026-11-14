@@ -27,10 +27,34 @@ service cloud.firestore {
       return code is string && code.size() >= 4 && code.size() <= 16 && code.matches('^[A-Z0-9\\-]+$');
     }
 
+    // Administrator (rodzic): konto Google z dokumentem admins/{uid} — nadawanym ręcznie w konsoli.
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && request.auth.uid == adminUid;
+      allow list, write: if false;
+    }
+
+    // Dziennik prób logowania (bez haseł) — zapis dla każdego, odczyt tylko dla administratora.
+    match /loginEvents/{eventId} {
+      allow create: if
+        incoming().keys().hasAll(['login', 'ok', 'reason', 'device', 'at']) &&
+        incoming().keys().hasOnly(['login', 'ok', 'reason', 'device', 'at']) &&
+        incoming().login is string && incoming().login.size() <= 40 &&
+        incoming().ok is bool &&
+        incoming().reason is string && incoming().reason.size() <= 60 &&
+        incoming().device is string && incoming().device.size() <= 20 &&
+        incoming().at == request.time;
+      allow get, list, delete: if isAdmin();
+      allow update: if false;
+    }
+
     // 5. Login → identyfikator profilu (potrzebny, by na nowym urządzeniu sprawdzić hasło).
     match /logins/{login} {
       allow get: if login.size() <= 40;
-      allow list: if false;
+      allow list: if isAdmin();
       allow create: if isSignedIn() && login.size() >= 1 && login.size() <= 40 &&
         incoming().keys().hasAll(['uid', 'profileId', 'createdAt']) &&
         incoming().keys().hasOnly(['uid', 'profileId', 'createdAt']) &&
@@ -47,8 +71,8 @@ service cloud.firestore {
 
       // 6. Konta login + hasło: pełny profil gracza, widoczny tylko dla właściciela.
     match /accounts/{uid} {
-      allow get: if isSignedIn() && request.auth.uid == uid;
-      allow list: if false;
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
       allow create, update: if isSignedIn() && request.auth.uid == uid &&
         incoming().keys().hasAll(['uid', 'login', 'profile', 'updatedAt']) &&
         incoming().keys().hasOnly(['uid', 'login', 'profile', 'updatedAt']) &&

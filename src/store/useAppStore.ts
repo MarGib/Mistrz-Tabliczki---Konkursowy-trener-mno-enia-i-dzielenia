@@ -59,6 +59,7 @@ import {
   registerOrSignInAccount,
   ensureAccount,
   ensureCircleMembership,
+  logLoginEvent,
   signInAccountAndFetch,
   signOutAccount,
   subscribeAccountProfile,
@@ -1468,7 +1469,10 @@ export function useAppStore() {
           hasSelectedProfile: true,
         }));
         await linkAccount(local.id, pwd);
-        if (accountSyncRef.current[local.id]?.state !== 'needs-password') return { ok: true };
+        if (accountSyncRef.current[local.id]?.state !== 'needs-password') {
+          void logLoginEvent(loginInput, true, 'ok');
+          return { ok: true };
+        }
         // Hasło na tym urządzeniu jest nieaktualne względem chmury — spróbuj logowania z chmury.
       }
       if (!pwd) return { ok: false, error: 'Wpisz hasło lub PIN.' };
@@ -1513,8 +1517,22 @@ export function useAppStore() {
         setSyncFor(cloud.id, { state: 'synced' });
         circlesEnsuredRef.current.delete(cloud.id);
         window.setTimeout(() => void ensureCircles(cloud.id), 500);
+        void logLoginEvent(loginInput, true, 'ok');
         return { ok: true };
       } catch (err) {
+        const code = String((err as { code?: string })?.code ?? '');
+        const msg = err instanceof Error ? err.message : '';
+        void logLoginEvent(
+          loginInput,
+          false,
+          code.startsWith('auth/invalid') || code === 'auth/wrong-password'
+            ? 'invalid-credential'
+            : /nie odpowiada/i.test(msg)
+            ? 'timeout'
+            : code === 'auth/network-request-failed'
+            ? 'network'
+            : code || msg.slice(0, 60) || 'inny błąd'
+        );
         void reloadIfNewVersion();
         return { ok: false, error: describeAccountError(err) };
       }
