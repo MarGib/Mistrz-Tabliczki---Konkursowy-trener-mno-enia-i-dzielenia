@@ -18,6 +18,17 @@ export interface ReleaseNote {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: '2026-11-15d',
+    date: '15 listopada 2026',
+    title: 'Raport tygodnia, cała historia i wyszukiwarka pomocy',
+    items: [
+      { emoji: '📊', text: 'Statystyki: raport tygodnia dla rodzica (z przyciskiem „Wyślij raport”) i cała historia serii — także z innych urządzeń.' },
+      { emoji: '🔎', text: 'Pomoc ma wyszukiwarkę: wpisz np. „hasło” albo „grupa”, a od razu zobaczysz właściwy dział.' },
+      { emoji: '📶', text: 'Aplikacja znowu otwiera się bez internetu (wcześniej po odświeżeniu bywał pusty ekran).' },
+      { emoji: '🔒', text: 'Nowa strona „Zasady prywatności” i możliwość usunięcia konta w zakładce Konto.' },
+    ],
+  },
+  {
     id: '2026-11-15c',
     date: '15 listopada 2026',
     title: 'Płynniej po ścieżce',
