@@ -1,5 +1,30 @@
 import { useState } from 'react';
-import { Check, Copy, Eye, EyeOff, LogOut, Plus, Settings2, Users, UsersRound } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, LogOut, PartyPopper, Plus, Send, Settings2, Users, UsersRound } from 'lucide-react';
+
+export function inviteLink(code: string): string {
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return `${base}?dolacz=${encodeURIComponent(code)}`;
+}
+
+/** Udostępnia zaproszenie (menu udostępniania telefonu) albo kopiuje je do schowka. */
+export async function shareInvite(circle: { name: string; code: string }): Promise<'shared' | 'copied' | 'failed'> {
+  const url = inviteLink(circle.code);
+  const text = `Dołącz do mojej grupy „${circle.name}” w Mistrzu Tabliczki! Kliknij link i zaloguj się (albo załóż konto). Kod grupy: ${circle.code}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Mistrz Tabliczki — zaproszenie', text, url });
+      return 'shared';
+    }
+  } catch {
+    // użytkownik zamknął menu udostępniania — spróbuj skopiować
+  }
+  try {
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    return 'copied';
+  } catch {
+    return 'failed';
+  }
+}
 import type { AccountSyncState } from '../store/useAppStore';
 import type { CircleMembership } from '../types/math';
 
@@ -10,7 +35,9 @@ interface GroupsPanelProps {
   accountState?: AccountSyncState;
   circleError: string | null;
   membersCount: number;
-  onCreateGroup: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  onCreateGroup: (
+    name: string
+  ) => Promise<{ ok: boolean; error?: string; circle?: CircleMembership }>;
   onJoinGroup: (code: string) => Promise<{ ok: boolean; error?: string }>;
   onLeaveGroup: (circleId: string) => Promise<{ ok: boolean; error?: string }>;
   onSetShare: (circleId: string, share: boolean) => void;
@@ -40,6 +67,20 @@ export function GroupsPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [justCreated, setJustCreated] = useState<CircleMembership | null>(null);
+  const [shareNote, setShareNote] = useState<string | null>(null);
+
+  const doShare = async (c: CircleMembership) => {
+    const r = await shareInvite(c);
+    setShareNote(
+      r === 'shared'
+        ? 'Wysłano zaproszenie.'
+        : r === 'copied'
+        ? 'Skopiowano zaproszenie z linkiem — wklej je w SMS-ie lub komunikatorze.'
+        : `Podaj znajomym kod: ${c.code}`
+    );
+    window.setTimeout(() => setShareNote(null), 4000);
+  };
 
   const synced = accountState?.state === 'synced';
   const selected = circles.find((c) => c.id === selectedCircleId) ?? null;
@@ -108,7 +149,50 @@ export function GroupsPanel({
           </button>
         </div>
 
-        {selected && (
+        {justCreated && (
+          <div
+            className="rounded-2xl border-2 border-[var(--th-primary)] bg-[var(--th-soft-tint)] p-4 space-y-3 animate-pop-in"
+            data-testid="group-created-card"
+          >
+            <div className="flex items-start gap-2.5">
+              <PartyPopper className="w-6 h-6 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
+              <div>
+                <p className="font-display text-lg font-extrabold text-[var(--th-text)]">
+                  Grupa „{justCreated.name}” gotowa!
+                </p>
+                <p className="text-sm text-[var(--th-text)]">
+                  Wyślij zaproszenie rodzinie lub znajomym. Po kliknięciu linku zalogują się i dołączą jednym przyciskiem.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex-1 rounded-xl bg-[var(--th-surface)] border border-[var(--th-border)] px-3 py-2 text-center">
+                <div className="text-[11px] font-bold text-[var(--th-text-muted)]">Kod grupy</div>
+                <div className="font-mono text-2xl font-extrabold tracking-widest text-[var(--th-text)]">
+                  {justCreated.code}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void doShare(justCreated)}
+                className="min-h-[48px] px-5 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Send className="w-4 h-4" aria-hidden="true" />
+                Wyślij zaproszenie
+              </button>
+              <button
+                type="button"
+                onClick={() => setJustCreated(null)}
+                className="min-h-[48px] px-4 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] text-[var(--th-text)] font-bold cursor-pointer"
+              >
+                Gotowe
+              </button>
+            </div>
+            {shareNote && <p className="text-xs font-semibold text-[var(--th-primary)]">{shareNote}</p>}
+          </div>
+        )}
+
+        {selected && !justCreated && (
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
             <span className="text-[var(--th-text-muted)] inline-flex items-center gap-1.5">
               <Users className="w-4 h-4" aria-hidden="true" />
@@ -129,7 +213,16 @@ export function GroupsPanel({
                   <Copy className="w-3.5 h-3.5" aria-hidden="true" />
                 )}
               </button>
+              <button
+                type="button"
+                onClick={() => void doShare(selected)}
+                className="min-h-[36px] px-3 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" aria-hidden="true" />
+                Zaproś
+              </button>
             </span>
+            {shareNote && <p className="w-full text-xs font-semibold text-[var(--th-primary)]">{shareNote}</p>}
           </div>
         )}
 
@@ -162,7 +255,19 @@ export function GroupsPanel({
                     className="space-y-1.5"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      void run(() => onCreateGroup(newName), () => setNewName(''));
+                      void (async () => {
+                        setBusy(true);
+                        setError(null);
+                        const res = await onCreateGroup(newName);
+                        setBusy(false);
+                        if (res.ok && res.circle) {
+                          setNewName('');
+                          setManageOpen(false);
+                          setJustCreated(res.circle);
+                        } else {
+                          setError(res.error ?? 'Nie udało się założyć grupy.');
+                        }
+                      })();
                     }}
                   >
                     <label htmlFor="new-group-name" className="block text-xs font-bold text-[var(--th-text)]">

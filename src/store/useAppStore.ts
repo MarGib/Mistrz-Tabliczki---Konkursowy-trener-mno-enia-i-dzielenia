@@ -1155,7 +1155,7 @@ export function useAppStore() {
         login: local?.login ?? cloud.login,
         passwordHash: local?.passwordHash ?? cloud.passwordHash,
         cloudUid: uid,
-        circles: cloud.circles ?? local?.circles ?? [],
+        circles: local ? base.circles ?? [] : cloud.circles ?? [],
       };
     },
     []
@@ -1466,14 +1466,14 @@ export function useAppStore() {
   }, []);
 
   const createGroup = useCallback(
-    async (name: string): Promise<{ ok: boolean; error?: string }> => {
+    async (name: string): Promise<{ ok: boolean; error?: string; circle?: CircleMembership }> => {
       const p = requireSyncedActive();
       if (typeof p === 'string') return { ok: false, error: p };
       try {
         const m = await withTimeout(createCircle(profileLogin(p), name), 20000, 'Baza nie odpowiada.');
         updateProfileCircles(p.id, (list) => [...list.filter((c) => c.id !== m.id), m]);
         setSelectedCircleId(m.id);
-        return { ok: true };
+        return { ok: true, circle: m };
       } catch (err) {
         return { ok: false, error: describeAccountError(err) };
       }
@@ -1487,6 +1487,12 @@ export function useAppStore() {
       if (typeof p === 'string') return { ok: false, error: p };
       try {
         const m = await withTimeout(joinCircleByCode(profileLogin(p), code), 20000, 'Baza nie odpowiada.');
+        setStore((prev) => ({
+          ...prev,
+          profiles: prev.profiles.map((x) =>
+            x.id === p.id ? { ...x, leftCircleIds: (x.leftCircleIds ?? []).filter((id) => id !== m.id) } : x
+          ),
+        }));
         updateProfileCircles(p.id, (list) => [...list.filter((c) => c.id !== m.id), m]);
         setSelectedCircleId(m.id);
         return { ok: true };
@@ -1507,6 +1513,14 @@ export function useAppStore() {
         return { ok: false, error: describeAccountError(err) };
       }
       updateProfileCircles(p.id, (list) => list.filter((c) => c.id !== circleId));
+      setStore((prev) => ({
+        ...prev,
+        profiles: prev.profiles.map((x) =>
+          x.id === p.id
+            ? { ...x, leftCircleIds: Array.from(new Set([...(x.leftCircleIds ?? []), circleId])) }
+            : x
+        ),
+      }));
       setSelectedCircleId((cur) => (cur === circleId ? null : cur));
       return { ok: true };
     },

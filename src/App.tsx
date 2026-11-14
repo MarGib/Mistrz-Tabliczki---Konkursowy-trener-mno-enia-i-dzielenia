@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ExerciseArena } from './components/ExerciseArena';
 import { GroupsPanel } from './components/GroupsPanel';
 import { SyncPrompt } from './components/SyncPrompt';
+import { InviteCard, capturePendingInvite } from './components/InviteCard';
+
+capturePendingInvite();
 import { FamilyWelcomeGate } from './components/FamilyWelcomeGate';
 import { NotificationCenter } from './components/NotificationCenter';
 import { ProfileSettingsView } from './components/ProfileSettingsView';
@@ -213,6 +216,14 @@ export default function App() {
           )}
 
           <main className={`flex-1 ${!activeSeries ? 'pb-20 md:pb-8' : 'pb-6'}`}>
+            {!activeSeries && (
+              <InviteCard
+                canJoin={accountSync[activeProfile.id]?.state === 'synced'}
+                alreadyMemberCodes={circles.map((c) => c.code)}
+                onJoin={joinGroup}
+                onJoined={() => handleSelectTab('statystyki')}
+              />
+            )}
             {!activeSeries && (
               <SyncPrompt
                 key={activeProfile.id}

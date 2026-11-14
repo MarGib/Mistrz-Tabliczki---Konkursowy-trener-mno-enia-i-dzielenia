@@ -298,7 +298,9 @@ export async function joinCircleByCode(login: string, rawCode: string): Promise<
     throw new Error('Nie znaleziono grupy o takim kodzie.');
   }
   const circleId = String(codeSnap.data().circleId);
-  await setDoc(doc(db, 'circles', circleId, 'members', uid), {
+  // Już członek (np. grupa zniknęła tylko z listy na tym urządzeniu) — nie zapisuj ponownie.
+  const existing = await getDoc(doc(db, 'circles', circleId, 'members', uid)).catch(() => null);
+  if (!existing?.exists()) await setDoc(doc(db, 'circles', circleId, 'members', uid), {
     uid,
     joinCode: code,
     joinedAt: serverTimestamp(),

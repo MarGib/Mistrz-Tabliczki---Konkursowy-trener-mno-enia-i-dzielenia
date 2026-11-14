@@ -294,6 +294,20 @@ function mergeSessions(
     .slice(-40);
 }
 
+/** Suma grup z obu kopii (lokalna wygrywa w ustawieniach), bez grup opuszczonych. */
+export function mergeCircleLists(
+  local: UserProfile['circles'],
+  cloud: UserProfile['circles'],
+  leftLocal?: string[],
+  leftCloud?: string[]
+): NonNullable<UserProfile['circles']> {
+  const left = new Set([...(leftLocal ?? []), ...(leftCloud ?? [])]);
+  const byId = new Map<string, NonNullable<UserProfile['circles']>[number]>();
+  for (const c of cloud ?? []) byId.set(c.id, c);
+  for (const c of local ?? []) byId.set(c.id, c);
+  return Array.from(byId.values()).filter((c) => !left.has(c.id));
+}
+
 export function mergeSingleProfile(
   local: UserProfile | undefined,
   cloud: UserProfile
@@ -304,7 +318,8 @@ export function mergeSingleProfile(
   return {
     ...merged,
     cloudUid: local.cloudUid ?? merged.cloudUid,
-    circles: local.circles ?? merged.circles,
+    circles: mergeCircleLists(local.circles, cloud.circles, local.leftCircleIds, cloud.leftCircleIds),
+    leftCircleIds: Array.from(new Set([...(local.leftCircleIds ?? []), ...(cloud.leftCircleIds ?? [])])).slice(-50),
     login: local.login ?? merged.login,
     passwordHash: local.passwordHash ?? merged.passwordHash,
   };

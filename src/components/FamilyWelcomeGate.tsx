@@ -24,6 +24,7 @@ import type { CloudSyncStatus } from '../store/useAppStore';
 import type { DeviceProfile, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 import { PasswordInput } from './PasswordInput';
+import { readPendingInvite } from './InviteCard';
 
 interface FamilyWelcomeGateProps {
   ownedProfiles: UserProfile[];
@@ -195,6 +196,12 @@ export function FamilyWelcomeGate({
               : 'Załóż konto z loginem i hasłem albo zaloguj się — wyniki zapiszą się w chmurze i będą na każdym urządzeniu.'}
           </p>
         </div>
+
+        {readPendingInvite() && (
+          <div className="max-w-md mx-auto mb-4 rounded-2xl border-2 border-[var(--th-primary)] bg-[var(--th-soft-tint)] px-4 py-3 text-sm text-[var(--th-text)] text-center">
+            <strong>Masz zaproszenie do grupy {readPendingInvite()}.</strong> Zaloguj się albo załóż konto — zaraz potem dołączysz jednym kliknięciem.
+          </div>
+        )}
 
         {/* Step 2: Unlock / Set Password for Chosen Owned Profile */}
         {selectedMember ? (

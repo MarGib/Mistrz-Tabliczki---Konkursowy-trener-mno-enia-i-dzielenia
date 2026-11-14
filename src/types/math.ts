@@ -238,6 +238,8 @@ export interface UserProfile {
   customThemes?: ColorTheme[];
   /** Grupy (rodzina, znajomi…), do których należy konto, i czy pokazuje w nich swoje wyniki. */
   circles?: CircleMembership[];
+  /** Grupy opuszczone przez gracza — żeby starsza kopia z chmury ich nie przywróciła. */
+  leftCircleIds?: string[];
   /** uid konta Firebase (login + hasło) — obecny, gdy konto jest zsynchronizowane w chmurze. */
   cloudUid?: string;
 }
