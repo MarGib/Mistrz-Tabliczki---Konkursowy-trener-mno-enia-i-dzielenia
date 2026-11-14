@@ -290,6 +290,9 @@ export function useAppStore() {
   void arenaPlayers;
   void mergeCompetitionProfiles;
 
+  const joinGroupRef = useRef<(code: string) => Promise<{ ok: boolean; error?: string }>>(
+    async () => ({ ok: false })
+  );
   const linkAccountRef = useRef<(profileId: string, password: string) => Promise<void>>(
     async () => {}
   );
@@ -1093,6 +1096,11 @@ export function useAppStore() {
 
   const joinGroupCode = useCallback(
     async (rawCode: string): Promise<{ ok: boolean; error?: string }> => {
+      // Kody nowych grup (G-…) obsługuje mechanizm grup, nie dawny workspace Google.
+      const cleaned = rawCode.trim().toUpperCase();
+      if (cleaned.startsWith('G')) {
+        return joinGroupRef.current(cleaned);
+      }
       const user = auth.currentUser;
       if (!user) {
         return {
@@ -1502,6 +1510,8 @@ export function useAppStore() {
     },
     [requireSyncedActive, updateProfileCircles]
   );
+
+  joinGroupRef.current = joinGroup;
 
   const leaveGroup = useCallback(
     async (circleId: string): Promise<{ ok: boolean; error?: string }> => {

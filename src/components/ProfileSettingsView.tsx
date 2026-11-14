@@ -884,7 +884,7 @@ export function ProfileSettingsView({
                     htmlFor="join-group-code-input"
                     className="block text-xs font-bold text-[var(--th-text)]"
                   >
-                    Masz kod innej klasy, szkoły lub grupy? Wpisz go tutaj:
+                    Masz kod grupy (np. G-AB12C)? Wpisz go tutaj:
                   </label>
                   <div className="flex gap-2">
                     <input

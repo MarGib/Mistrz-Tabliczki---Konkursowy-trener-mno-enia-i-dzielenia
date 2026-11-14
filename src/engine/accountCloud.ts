@@ -293,9 +293,9 @@ export async function joinCircleByCode(login: string, rawCode: string): Promise<
   let code = rawCode.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
   if (code && !code.startsWith('G-')) code = `G-${code.replace(/^G/, '')}`;
   if (code.length < 4) throw new Error('Wpisz kod grupy, np. G-AB12C.');
-  const codeSnap = await getDoc(doc(db, 'circleCodes', code)).catch(() => null);
-  if (!codeSnap || !codeSnap.exists()) {
-    throw new Error('Nie znaleziono grupy o takim kodzie.');
+  const codeSnap = await getDoc(doc(db, 'circleCodes', code)); // błąd sieci/uprawnień → czytelny komunikat wyżej
+  if (!codeSnap.exists()) {
+    throw new Error(`Nie znaleziono grupy o kodzie ${code}. Sprawdź, czy kod jest przepisany dokładnie.`);
   }
   const circleId = String(codeSnap.data().circleId);
   // Już członek (np. grupa zniknęła tylko z listy na tym urządzeniu) — nie zapisuj ponownie.
