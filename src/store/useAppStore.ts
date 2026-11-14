@@ -7,6 +7,13 @@ function lessonConfigFor(id: string) {
   return l ? lessonToConfig(l) : undefined;
 }
 import { deviceHeartbeat } from '../engine/telemetry';
+import {
+  canCreateAccountHere,
+  clearLoginFailures,
+  loginLockLeftMs,
+  noteAccountCreatedHere,
+  noteLoginFailure,
+} from '../engine/integrity';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -68,6 +75,10 @@ import {
   ensureAccount,
   ensureCircleMembership,
   logLoginEvent,
+  type AccountReview,
+  type ReviewEvent,
+  fetchAccountReview,
+  reportAccountReview,
   signInAccountAndFetch,
   signOutAccount,
   subscribeAccountProfile,
@@ -311,6 +322,10 @@ type LinkResult = 'synced' | 'needs-password' | 'error' | 'skip';
 export function useAppStore() {
   const [store, setStore] = useState<StoreState>(loadInitialStore);
   const storeRef = useRef<StoreState>(store);
+  // Uczciwa gra: zgłoszenie podejrzanej serii (ustawiane niżej, gdy są już potrzebne funkcje).
+  const reportIntegrityRef = useRef<(profileId: string, level: 'watch' | 'pending', events: ReviewEvent[]) => void>(
+    () => {}
+  );
   storeRef.current = store;
 
   const [cloudMeta, setCloudMeta] = useState<CloudSessionMeta | null>(null);
@@ -1001,6 +1016,16 @@ export function useAppStore() {
           notifications: nextNotifications,
         };
       });
+      if (session.integrity) {
+        const pid = storeRef.current.activeProfileId;
+        const it = session.integrity;
+        const d = `mediana ${(it.medianMs / 1000).toFixed(2)} s · ${session.totalTasks} zad. · ${session.accuracyPct}% · ${session.seriesTitle}`;
+        reportIntegrityRef.current(
+          pid,
+          it.level,
+          it.reasons.map((k) => ({ k, at: session.timestamp, d }))
+        );
+      }
     },
     []
   );
@@ -1505,6 +1530,8 @@ export function useAppStore() {
       for (const p of store.profiles) {
         if (!p.cloudUid || !store.ownedProfileIds.includes(p.id)) continue;
         if (accountSync[p.id]?.state !== 'synced') continue;
+        // Konto zablokowane przez opiekuna — baza i tak odrzuci zapis, więc nie próbujemy.
+        if (p.review?.state === 'suspended') continue;
         const fp = accountFingerprint(p);
         if (pushedAccountFpRef.current.get(p.id) === fp) continue;
         // Odstęp między zapisami: zwykle 5 s; gdy ktoś gra bardzo dużo serii pod rząd
@@ -1566,6 +1593,7 @@ export function useAppStore() {
           p.name,
           p.avatarId,
           (p.circles ?? []).map((c) => `${c.id}:${c.share ? 1 : 0}`).join(','),
+          p.review?.state ?? '',
         ].join('|');
         if (cardFpRef.current.get(p.id) !== cardFp) {
           cardFpRef.current.set(p.id, cardFp);
@@ -1623,6 +1651,8 @@ export function useAppStore() {
         return { ok: false, error: 'Hasło lub PIN musi mieć co najmniej 4 znaki.' };
       }
       const login = normalizeLogin(trimmedName);
+      const gate = canCreateAccountHere();
+      if (!gate.allowed) return { ok: false, error: gate.message };
       if (storeRef.current.profiles.some((p) => profileLogin(p) === login)) {
         return { ok: false, error: 'Konto o takim loginie już jest na tym urządzeniu. Zaloguj się w „Mam już konto”.' };
       }
@@ -1678,6 +1708,16 @@ export function useAppStore() {
         hasSelectedProfile: true,
       }));
       setSyncFor(finalProfile.id, syncState);
+      if (noteAccountCreatedHere() && finalProfile.cloudUid) {
+        const pid = finalProfile.id;
+        window.setTimeout(
+          () =>
+            reportIntegrityRef.current(pid, 'watch', [
+              { k: 'many-accounts', at: Date.now(), d: 'kolejne konto założone na tym samym urządzeniu' },
+            ]),
+          3000
+        );
+      }
       return { ok: true };
     },
     [setSyncFor]
@@ -1693,6 +1733,13 @@ export function useAppStore() {
       const login = normalizeLogin(loginInput);
       const pwd = passwordInput.trim();
       if (!loginInput.trim()) return { ok: false, error: 'Wpisz swój login.' };
+      const lockLeft = loginLockLeftMs();
+      if (lockLeft > 0) {
+        return {
+          ok: false,
+          error: `Za dużo błędnych prób. Odczekaj ${Math.ceil(lockLeft / 60_000)} min i spróbuj ponownie (albo poproś opiekuna o nowe hasło).`,
+        };
+      }
 
       const local = opts?.cloudOnly ? undefined : storeRef.current.profiles.find((p) => profileLogin(p) === login);
       if (local && hasAccountPassword(local) && verifyAccountCredentials(local, pwd, loginInput)) {
@@ -1765,9 +1812,13 @@ export function useAppStore() {
         circlesEnsuredRef.current.delete(cloud.id);
         window.setTimeout(() => void ensureCircles(cloud.id), 500);
         void logLoginEvent(loginInput, true, 'ok');
+        clearLoginFailures();
         return { ok: true };
       } catch (err) {
         const code = String((err as { code?: string })?.code ?? '');
+        if (code.startsWith('auth/invalid') || code === 'auth/wrong-password' || code === 'auth/too-many-requests') {
+          noteLoginFailure();
+        }
         const msg = err instanceof Error ? err.message : '';
         void logLoginEvent(
           loginInput,
@@ -1788,6 +1839,61 @@ export function useAppStore() {
   );
 
   loginToCloudAccountRef.current = loginToCloudAccount;
+
+  /* ============================== Uczciwa gra ============================== */
+  const applyReview = useCallback((profileId: string, r: AccountReview | null) => {
+    const state = r?.state ?? 'cleared';
+    const trusted = r?.trusted ?? false;
+    const cur = storeRef.current.profiles.find((p) => p.id === profileId)?.review;
+    // Bez zmian = bez zapisu (oszczędzamy darmowy limit bazy).
+    if (cur && cur.state === state && Boolean(cur.trusted) === trusted) return;
+    if (!cur && state === 'cleared') return;
+    setStore((prev) => ({
+      ...prev,
+      profiles: prev.profiles.map((p) =>
+        p.id !== profileId ? p : { ...p, review: { state, trusted, checkedAt: Date.now() } }
+      ),
+    }));
+  }, []);
+
+  reportIntegrityRef.current = (profileId, level, events) => {
+    const p = storeRef.current.profiles.find((x) => x.id === profileId);
+    if (!p || !p.cloudUid || p.cloudOptOut || p.review?.trusted) return;
+    void reportAccountReview(profileLogin(p), level, events)
+      .then((r) => {
+        if (r) applyReview(profileId, r);
+      })
+      .catch(() => {});
+  };
+
+  // Decyzje opiekuna (zwolnienie / blokada) — sprawdzane przy starcie i co 20 minut (1 odczyt).
+  const activeReviewKey = (() => {
+    const p = store.profiles.find((x) => x.id === store.activeProfileId);
+    return p?.cloudUid && !p.cloudOptOut ? `${p.id}|${profileLogin(p)}` : '';
+  })();
+  useEffect(() => {
+    if (!activeReviewKey) return;
+    const [pid, login] = activeReviewKey.split('|');
+    let stop = false;
+    const check = async () => {
+      try {
+        if (!navigator.onLine) return;
+        const uid = await getSignedInAccountUid(login);
+        if (!uid || stop) return;
+        const r = await fetchAccountReview(login);
+        if (!stop) applyReview(pid, r);
+      } catch {
+        // brak sieci / limit bazy — sprawdzimy później
+      }
+    };
+    const first = window.setTimeout(() => void check(), 4000);
+    const every = window.setInterval(() => void check(), 20 * 60_000);
+    return () => {
+      stop = true;
+      window.clearTimeout(first);
+      window.clearInterval(every);
+    };
+  }, [activeReviewKey, applyReview]);
 
   /** Wyloguj konto z tego urządzenia. Konto w chmurze zostaje — można zalogować się ponownie. */
   const logoutAccount = useCallback(

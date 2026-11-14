@@ -8,6 +8,7 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { type Firestore, addDoc, collection, doc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-accounts-config.json';
+import { protectApp } from './appCheck';
 import { isStandalone } from '../pwa';
 
 const DEVICE_KEY = 'mt_device_id';
@@ -20,6 +21,7 @@ function telemetryDb(): Firestore {
   if (db) return db;
   const name = 'telemetry';
   const app = getApps().some((a) => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
+  protectApp(app);
   db = getFirestore(app);
   return db;
 }

@@ -41,3 +41,20 @@ Wydania → „Pasek z informacją” — np. zapowiedź przerwy albo nowego tur
 ## Wycofanie wersji
 
 `git revert <commit>` i `git push` — urządzenia przełączą się na poprzednią wersję tak samo po cichu.
+
+## Uczciwa gra i ochrona bazy
+
+**Co działa samo:**
+- Czujnik w grze (`src/engine/integrity.ts`) ocenia każdą serię. Mocny sygnał (automat, odpowiedzi < 0,45 s, dwa słabe naraz) zapisuje `reviews/{uid}` ze stanem `pending`. Wtedy karta gracza znika z rankingów grup, a reguły bazy nie przyjmują nowej karty do decyzji opiekuna. Słaby sygnał zapisuje `watch`.
+- Panel → **Uczciwa gra**: zgłoszenia i decyzje (W porządku / Zaufaj / Zablokuj) oraz skan danych na serwerze (serie „w 0 s”, urządzenia z ≥ 5 kontami, zgadywanie haseł).
+- Blokada (`suspended`): baza nie przyjmuje zapisów konta, a gracz widzi ekran „Konto jest wstrzymane” z prośbą o kontakt. Całkowite wyłączenie logowania: Firebase → Authentication → konto → Disable.
+- Limity na urządzeniu: 3 nowe konta dziennie; po 5 błędnych hasłach 5 minut przerwy. Firebase Auth dodatkowo sam spowalnia zgadywanie haseł.
+- Na lokalnym serwerze (`localhost`, testy) nic nie jest zgłaszane do bazy.
+
+**Do włączenia ręcznie (zalecane) — App Check:**
+1. https://www.google.com/recaptcha/admin → nowy klucz **reCAPTCHA v3**, domena `margib.github.io`.
+2. Klucz **witryny** wpisz w `src/engine/appCheck.ts` (`RECAPTCHA_SITE_KEY`) i wydaj wersję.
+3. Firebase → App Check → aplikacja web → reCAPTCHA v3 → wklej klucz **tajny** (robi to właściciel, nie trafia do kodu).
+4. Przez kilka dni obserwuj w App Check odsetek „zweryfikowanych” zapytań. Gdy jest blisko 100%: Firestore i Authentication → **Wymuszaj**.
+
+**Ataki na dostępność (DDoS):** stronę serwuje GitHub Pages przez CDN (ochrona po stronie GitHuba). Baza jest na planie Spark, więc nie ma rachunku. W najgorszym razie dzienny limit się wyczerpie, a aplikacja przechodzi wtedy w tryb „wyniki wyślą się później” i gra działa dalej. App Check odcina skrypty spoza aplikacji.

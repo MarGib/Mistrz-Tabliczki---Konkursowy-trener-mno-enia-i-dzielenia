@@ -22,6 +22,9 @@ import {
   listAppErrors,
   listDevices,
   listHelpRequests,
+  listReviews,
+  decideReview,
+  type ReviewRow,
   listLoginEvents,
   readAppStatusAdmin,
   restoreAdminSession,
@@ -41,6 +44,7 @@ import {
 import { type AppStatus } from '../engine/appStatus';
 import { normalizeLogin } from '../engine/accountSecurity';
 import { RELEASES } from '../data/changelog';
+import { AdminFairPlay, fairPlayFindings } from './AdminFairPlay';
 
 export interface AdminDemoData {
   accounts: AdminAccountRow[];
@@ -50,6 +54,7 @@ export interface AdminDemoData {
   help: HelpRequestRow[];
   hosting: HostingInfo;
   usage: DbUsageDay[];
+  reviews?: ReviewRow[];
 }
 
 interface AdminPanelProps {
@@ -78,7 +83,7 @@ const TOPIC_PL: Record<string, string> = {
   other: 'Inny problem',
 };
 
-type Tab = 'przeglad' | 'aktywnosc' | 'baza' | 'hosting' | 'wydania' | 'pomoc' | 'bledy' | 'konta' | 'logowania';
+type Tab = 'przeglad' | 'weryfikacja' | 'aktywnosc' | 'baza' | 'hosting' | 'wydania' | 'pomoc' | 'bledy' | 'konta' | 'logowania';
 
 const LEVEL_STYLE: Record<Level, string> = {
   ok: 'border-emerald-300 bg-emerald-50 text-emerald-950',
@@ -173,6 +178,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [errors, setErrors] = useState<AppErrorRow[]>([]);
   const [help, setHelp] = useState<HelpRequestRow[]>([]);
+  const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [hosting, setHosting] = useState<HostingInfo | null>(null);
   const [usage, setUsage] = useState<DbUsageDay[] | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -199,6 +205,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
     setError(null);
     const soft = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
     try {
+      void soft(listReviews(), []).then(setReviews);
       const [a, e, d, er, h, ho, st] = await Promise.all([
         listAccounts(),
         soft(listLoginEvents(), []),
@@ -233,6 +240,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
       setDevices(demo.devices);
       setErrors(demo.errors);
       setHelp(demo.help);
+      setReviews(demo.reviews ?? []);
       setHosting(demo.hosting);
       setUsage(demo.usage);
       setStatus({ mode: 'off', message: '', untilMs: 0 });
@@ -347,8 +355,11 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
     </form>
   );
 
+  const fairCount =
+    reviews.filter((r) => r.state === 'pending').length + fairPlayFindings(accounts, devices, events).fastSeries.length;
   const TABS: [Tab, string][] = [
     ['przeglad', 'Przegląd'],
+    ['weryfikacja', `Uczciwa gra${fairCount ? ` (${fairCount})` : ''}`],
     ['aktywnosc', 'Aktywność'],
     ['baza', 'Baza'],
     ['hosting', 'Hosting'],
@@ -732,6 +743,24 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                   ))}
                 </div>
               </div>
+            )}
+
+            {tab === 'weryfikacja' && (
+              <AdminFairPlay
+                reviews={reviews}
+                accounts={accounts}
+                devices={devices}
+                events={events}
+                onDecide={async (uid, d) => {
+                  try {
+                    await decideReview(uid, d);
+                    setReviews(await listReviews());
+                    setNotice(d === 'suspended' ? 'Konto zablokowane.' : d === 'trusted' ? 'Konto oznaczone jako zaufane.' : 'Konto zwolnione — wyniki wracają do rankingów.');
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+              />
             )}
 
             {tab === 'pomoc' && (

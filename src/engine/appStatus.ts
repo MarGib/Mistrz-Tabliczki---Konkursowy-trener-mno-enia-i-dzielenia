@@ -8,6 +8,7 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { type Firestore, doc, getDoc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-accounts-config.json';
+import { protectApp } from './appCheck';
 
 export type AppStatusMode = 'off' | 'banner' | 'maintenance';
 export interface AppStatus {
@@ -24,6 +25,7 @@ function statusDb(): Firestore {
   if (db) return db;
   const name = 'telemetry';
   const app = getApps().some((a) => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
+  protectApp(app);
   db = getFirestore(app);
   return db;
 }

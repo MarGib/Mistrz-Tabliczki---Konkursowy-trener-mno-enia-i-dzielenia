@@ -26,9 +26,12 @@ import {
   limit,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
   updateDoc,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-accounts-config.json';
+import { protectApp } from './appCheck';
 import type { SessionRecord, UserProfile } from '../types/math';
 import { type AppStatus, saveAppStatus } from './appStatus';
 import { hashAccountPassword } from './accountSecurity';
@@ -50,6 +53,7 @@ function getAdminHandle(): AdminHandle {
   if (handle) return handle;
   const name = 'admin-panel';
   const app = getApps().some((a) => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
+  protectApp(app);
   handle = { app, auth: getAuth(app), db: getFirestore(app) };
   return handle;
 }
@@ -459,5 +463,63 @@ export async function fetchHostingInfo(): Promise<HostingInfo | null> {
     return { appVersion: String(m.appVersion ?? '?'), coreBytes: Number(m.coreBytes) || 0, totalBytes: Number(m.totalBytes) || 0 };
   } catch {
     return null;
+  }
+}
+
+/* ------------------------------ Uczciwa gra: weryfikacja kont ------------------------------ */
+
+export interface ReviewRow {
+  uid: string;
+  login: string;
+  state: 'watch' | 'pending' | 'suspended' | 'cleared';
+  trusted: boolean;
+  events: { k: string; at: number; d: string }[];
+  device: string;
+  note: string;
+  updatedAtMs: number;
+}
+
+export async function listReviews(): Promise<ReviewRow[]> {
+  const { db } = getAdminHandle();
+  const snap = await getDocs(collection(db, 'reviews'));
+  return snap.docs
+    .map((d) => {
+      const x = d.data() as Record<string, unknown>;
+      const st = String(x.state ?? 'watch');
+      return {
+        uid: d.id,
+        login: String(x.login ?? ''),
+        state: (['watch', 'pending', 'suspended', 'cleared'].includes(st) ? st : 'watch') as ReviewRow['state'],
+        trusted: x.trusted === true,
+        events: Array.isArray(x.events) ? (x.events as ReviewRow['events']) : [],
+        device: String(x.device ?? ''),
+        note: String(x.note ?? ''),
+        updatedAtMs: ms(x.updatedAt),
+      };
+    })
+    .sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+}
+
+/** Decyzja opiekuna: zwolnij (OK), zaufaj na stałe, zablokuj. */
+export async function decideReview(
+  uid: string,
+  decision: 'cleared' | 'trusted' | 'suspended',
+  note = ''
+): Promise<void> {
+  const { db } = getAdminHandle();
+  const ref = doc(db, 'reviews', uid);
+  const payload = {
+    state: decision === 'suspended' ? 'suspended' : 'cleared',
+    trusted: decision === 'trusted',
+    note: note.slice(0, 200),
+    decidedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await updateDoc(ref, payload);
+  } else {
+    // Blokada z wyniku skanu serwera — konto nie miało jeszcze wpisu.
+    await setDoc(ref, { uid, login: '', events: [], device: '', createdAt: serverTimestamp(), ...payload });
   }
 }

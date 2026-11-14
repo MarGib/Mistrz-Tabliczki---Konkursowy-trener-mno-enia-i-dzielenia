@@ -41,6 +41,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-accounts-config.json';
+import { protectApp } from './appCheck';
 import legacyConfig from '../../firebase-applet-config.json';
 import type { CircleMembership, UserProfile } from '../types/math';
 import { hashAccountPassword, normalizeLogin } from './accountSecurity';
@@ -74,6 +75,7 @@ function getHandle(login: string): AccountHandle {
   const cached = handles.get(name);
   if (cached) return cached;
   const app = getApps().some((a) => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
+  protectApp(app);
   const handle: AccountHandle = {
     app,
     auth: getAuth(app),
@@ -516,9 +518,11 @@ export async function publishCircleCards(profile: UserProfile): Promise<void> {
     ...stripUndefinedDeep({ ...rest, uid, profileId: sanitizeFirestoreId(profile.id) }),
     updatedAt: serverTimestamp(),
   };
+  // Konto w weryfikacji: wyniki znikają z rankingów grup do decyzji opiekuna.
+  const held = profile.review?.state === 'pending' || profile.review?.state === 'suspended';
   await Promise.all(
     circles.map((c) =>
-      c.share
+      c.share && !held
         ? setDoc(doc(db, 'circles', c.id, 'players', uid), payload).catch(() => {})
         : deleteDoc(doc(db, 'circles', c.id, 'players', uid)).catch(() => {})
     )
@@ -591,4 +595,91 @@ export async function logLoginEvent(loginInput: string, ok: boolean, reason: str
   } catch {
     // dziennik nie może blokować logowania
   }
+}
+
+/* ------------------------------ Uczciwa gra (weryfikacja kont) ------------------------------ */
+
+export type ReviewState = 'watch' | 'pending' | 'suspended' | 'cleared';
+
+export interface ReviewEvent {
+  /** Kod powodu (integrity.ts → REASON_LABELS). */
+  k: string;
+  /** Kiedy (ms). */
+  at: number;
+  /** Krótki opis, np. „mediana 380 ms, 20 zadań, 100%”. */
+  d: string;
+}
+
+export interface AccountReview {
+  state: ReviewState;
+  trusted: boolean;
+}
+
+function isTestEnvironment(): boolean {
+  try {
+    if (import.meta.env?.DEV) return true;
+    return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Stan weryfikacji konta (1 odczyt). null = brak wpisu (wszystko w porządku). */
+export async function fetchAccountReview(login: string): Promise<AccountReview | null> {
+  const { auth, db } = getHandle(normalizeLogin(login));
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+  const snap = await getDoc(doc(db, 'reviews', uid));
+  if (!snap.exists()) return null;
+  const d = snap.data();
+  return { state: (d.state as ReviewState) ?? 'watch', trusted: d.trusted === true };
+}
+
+/**
+ * Zgłoszenie do weryfikacji. „pending” wstrzymuje udział w rankingach do decyzji opiekuna,
+ * „watch” to tylko wpis dla administratora. Nigdy nie obniża stanu (pending → watch)
+ * i nic nie robi dla kont oznaczonych przez opiekuna jako zaufane.
+ */
+export async function reportAccountReview(
+  login: string,
+  level: 'watch' | 'pending',
+  events: ReviewEvent[]
+): Promise<AccountReview | null> {
+  if (isTestEnvironment()) return null;
+  const norm = normalizeLogin(login);
+  const { auth, db } = getHandle(norm);
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+  const ref = doc(db, 'reviews', uid);
+  const snap = await getDoc(ref);
+  const prev = snap.exists() ? snap.data() : null;
+  if (prev?.trusted === true || prev?.state === 'suspended') {
+    return { state: (prev.state as ReviewState) ?? 'cleared', trusted: prev.trusted === true };
+  }
+  const state: ReviewState = prev?.state === 'pending' ? 'pending' : level;
+  const oldEvents = Array.isArray(prev?.events) ? (prev!.events as ReviewEvent[]) : [];
+  const merged = [...oldEvents, ...events]
+    .map((e) => ({ k: String(e.k).slice(0, 20), at: Number(e.at) || 0, d: String(e.d ?? '').slice(0, 120) }))
+    .slice(-20);
+  let device = '';
+  try {
+    device = (window.localStorage.getItem('mt_device_id') ?? '').slice(0, 40);
+  } catch {
+    device = '';
+  }
+  if (prev) {
+    await setDoc(ref, { state, events: merged, device, updatedAt: serverTimestamp() }, { merge: true });
+  } else {
+    await setDoc(ref, {
+      uid,
+      login: norm.slice(0, 40),
+      state,
+      events: merged,
+      trusted: false,
+      device,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+  return { state, trusted: false };
 }

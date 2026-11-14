@@ -27,8 +27,8 @@ export const DEMO: AdminDemoData = {
       kind: kinds[Math.floor(rnd() * 4)],
       mode: 'mixed',
       tasks: 10,
-      correct: 8 + Math.floor(rnd() * 3),
-      avgMs: 1800 + rnd() * 3000,
+      correct: i === 6 && k < 2 ? 10 : 8 + Math.floor(rnd() * 3),
+      avgMs: i === 6 && k < 2 ? 320 : 1800 + rnd() * 3000,
     })),
   })),
   events: [
@@ -53,6 +53,12 @@ export const DEMO: AdminDemoData = {
   help: [
     { id: 'h1', login: 'ola', topic: 'password', message: 'Zapomniałam hasła na iPadzie', contact: 'mama Oli', platform: 'iPad', status: 'new', atMs: now - 2 * 3600_000 },
     { id: 'h2', login: 'kuba', topic: 'sync', message: '', contact: '', platform: 'Android telefon', status: 'done', atMs: now - 3 * DAY },
+  ],
+  reviews: [
+    { uid: 'u4', login: 'spiderman', state: 'pending', trusted: false, device: 'd4', note: '', updatedAtMs: now - 1800_000,
+      events: [{ k: 'superhuman', at: now - 1800_000, d: 'mediana 0.21 s · 20 zad. · 100% · Wyścig 60 s' }, { k: 'automation', at: now - 1800_000, d: 'mediana 0.21 s · 20 zad. · 100% · Wyścig 60 s' }] },
+    { uid: 'u2', login: 'kuba', state: 'watch', trusted: false, device: 'd2', note: '', updatedAtMs: now - DAY,
+      events: [{ k: 'window-switch', at: now - DAY, d: 'mediana 4.10 s · 10 zad. · 100% · Twierdza Dzielenia' }] },
   ],
   hosting: { appVersion: '2026-11-14 20:44', coreBytes: 2_972_253, totalBytes: 10_313_259 },
   usage: Array.from({ length: 14 }, (_, i) => ({

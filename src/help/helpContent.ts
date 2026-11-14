@@ -25,6 +25,7 @@ export type HelpSectionId =
   | 'offline'
   | 'forgot'
   | 'logout'
+  | 'fairplay'
   | 'parent';
 
 export type HelpChapterId = 'first' | 'play' | 'groups' | 'account' | 'parent';
@@ -395,6 +396,19 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Zapisujemy tylko wyniki gry: które działania, ile poprawnie, w jakim tempie — po to, żeby gracz i rodzic widzieli postęp.',
       'Wyniki widzą tylko członkowie Twojej grupy (np. rodzina), i tylko jeśli tego chcesz.',
       'Brak reklam, brak śledzenia, brak sprzedaży danych. Aplikacja jest darmowa.',
+    ],
+  },
+  {
+    id: 'fairplay',
+    chapter: 'parent',
+    title: 'Uczciwa gra: bez botów i podpowiadaczy',
+    lead: 'Rankingi mają sens tylko wtedy, gdy liczy dziecko — nie automat ani sztuczna inteligencja. Aplikacja pilnuje tego po cichu i bez kar.',
+    steps: [
+      'Aplikacja zauważa serie, których człowiek nie jest w stanie zagrać: odpowiedzi szybsze niż da się wpisać, idealnie równe tempo jak u maszyny, „klikanie” przez skrypt albo częste przełączanie okna przy zadaniach (np. pytanie AI).',
+      'Wtedy wyniki trafiają „do sprawdzenia”: znikają z rankingów grupy, ale dziecko dalej normalnie gra i ćwiczy. Nic nie przepada.',
+      'Opiekun aplikacji ogląda zgłoszenie i decyduje: „W porządku” (wyniki wracają), „Zaufaj” (bardzo szybkie dziecko) albo „Zablokuj”.',
+      'Na jednym urządzeniu można założyć najwyżej 3 konta dziennie, a po 5 błędnych hasłach logowanie czeka 5 minut.',
+      'Szybkie liczenie z pamięci to cel tej aplikacji — za samo szybkie liczenie nikt nie jest karany.',
     ],
   },
   {

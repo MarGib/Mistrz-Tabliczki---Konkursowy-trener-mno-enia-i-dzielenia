@@ -85,6 +85,8 @@ export interface SessionRecord {
   lessonId?: string;
   /** Wolny trening. */
   free?: boolean;
+  /** Uczciwa gra: wynik czujnika, gdy seria wyglądała nienaturalnie. */
+  integrity?: { level: 'watch' | 'pending'; reasons: string[]; medianMs: number };
   attempts: TaskAttempt[];
 }
 
@@ -269,6 +271,8 @@ export interface UserProfile {
   completedLessonIds?: string[];
   /** Gwiazdki za kropki (1–3). */
   lessonStars?: Record<string, number>;
+  /** Uczciwa gra: ostatnio odczytany stan weryfikacji konta (źródłem prawdy jest baza: reviews/{uid}). */
+  review?: { state: 'watch' | 'pending' | 'suspended' | 'cleared'; trusted?: boolean; checkedAt: number };
 }
 
 export interface CircleMembership {

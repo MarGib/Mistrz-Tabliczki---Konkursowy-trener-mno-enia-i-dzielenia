@@ -17,6 +17,7 @@ import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
 import { AppStatusLayer } from './components/AppStatusLayer';
+import { FairPlayNotice } from './components/FairPlayNotice';
 import { WhatsNewDialog, markReleaseSeen } from './components/WhatsNewDialog';
 import { HowWePlayDialog, playedBeforePath, rulesSeen } from './components/HowWePlayDialog';
 import { GuidedTour } from './help/GuidedTour';
@@ -295,6 +296,9 @@ export default function App() {
           <main className={`flex-1 ${!activeSeries ? 'pb-[calc(5.5rem+var(--mt-install-h,0px)+env(safe-area-inset-bottom))] md:pb-[calc(2rem+var(--mt-install-h,0px))]' : 'pb-6'}`}>
             {!activeSeries && <InstallBanner />}
             {!activeSeries && !adminOpen && <AppStatusLayer />}
+            {!activeSeries && !adminOpen && (
+              <FairPlayNotice profile={activeProfile} onLogout={() => void logoutAccount(activeProfile.id)} />
+            )}
             {!activeSeries && (
               <InviteCard
                 canJoin={accountSync[activeProfile.id]?.state === 'synced'}

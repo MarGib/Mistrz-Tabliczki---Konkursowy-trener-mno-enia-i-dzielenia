@@ -53,6 +53,7 @@ import { personalRecord } from '../engine/records';
 import { buildSeriesProblems, seriesPassed } from '../engine/seriesRules';
 import { LessonIntroCard } from './LessonIntroCard';
 import { lessonStars } from '../engine/path';
+import { assessSeries, createIntegritySensor } from '../engine/integrity';
 
 interface ExerciseArenaProps {
   config: ActiveSeriesConfig;
@@ -140,6 +141,14 @@ export function ExerciseArena({
   const [tickPulse, setTickPulse] = useState(false);
 
   const taskStartRef = useRef<number>(Date.now());
+  // Uczciwa gra: liczniki zdarzeń wygenerowanych skryptem i chowania aplikacji (bez treści).
+  const sensorRef = useRef<ReturnType<typeof createIntegritySensor> | null>(null);
+  if (!sensorRef.current) sensorRef.current = createIntegritySensor();
+  useEffect(() => {
+    const sensor = sensorRef.current!;
+    sensor.start();
+    return () => sensor.stop();
+  }, []);
   const seriesStartRef = useRef<number>(Date.now());
   const recordedRef = useRef(false);
   const lastTickSecRef = useRef<number>(-1);
@@ -331,6 +340,10 @@ export function ExerciseArena({
             thresholdPct: config.passAccuracyPct,
             attempts: nextAttempts,
           };
+          const verdict = assessSeries(nextAttempts, sensorRef.current!.signals());
+          if (verdict.level !== 'ok') {
+            session.integrity = { level: verdict.level, reasons: verdict.reasons, medianMs: verdict.medianMs };
+          }
           onCompleteSession(session, nextAttempts);
         }
       } else {
@@ -367,8 +380,10 @@ export function ExerciseArena({
 
     ensureAudioStarted();
     const numeric = Number.parseInt(inputValue, 10);
-    const timeMs = Math.max(300, Date.now() - taskStartRef.current);
+    const rawMs = Date.now() - taskStartRef.current;
+    const timeMs = Math.max(300, rawMs);
     const isCorrect = numeric === currentProblem.answer;
+    sensorRef.current?.answer(rawMs, isCorrect);
     const nextStreak = isCorrect ? streak + 1 : 0;
     const points = calculateTaskPoints(isCorrect, timeMs, showHint, streak);
     const quality = computeResponseQuality(isCorrect, timeMs, showHint);
@@ -452,6 +467,7 @@ export function ExerciseArena({
   }, [advanceToNext, attempts, feedback, isFinished]);
 
   const handleRestartSeries = () => {
+    sensorRef.current?.reset();
     const fresh = buildSeriesProblems(config, memories);
     setProblems(fresh);
     setTimeLeftSec(config.timeLimitSec ?? null);

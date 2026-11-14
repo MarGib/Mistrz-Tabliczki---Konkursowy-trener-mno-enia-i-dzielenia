@@ -349,6 +349,8 @@ export function mergeSingleProfile(
     masterLevel: Math.max(local.masterLevel ?? 0, cloud.masterLevel ?? 0) || undefined,
     completedLessonIds: Array.from(new Set([...(local.completedLessonIds ?? []), ...(cloud.completedLessonIds ?? [])])),
     lessonStars: mergeStars(local.lessonStars, cloud.lessonStars),
+    review:
+      (local.review?.checkedAt ?? 0) >= (cloud.review?.checkedAt ?? 0) ? local.review ?? cloud.review : cloud.review,
   };
 }
 

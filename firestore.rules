@@ -105,6 +105,47 @@ service cloud.firestore {
       allow update: if isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status']);
     }
 
+    // Uczciwa gra: stan weryfikacji konta. Gracz (jego aplikacja) może tylko ZGŁOSIĆ podejrzenie
+    // (watch → pending), nigdy go cofnąć. Zwolnić, zablokować lub oznaczyć jako zaufane może tylko administrator.
+    function reviewState(uid) {
+      let path = /databases/$(database)/documents/reviews/$(uid);
+      return exists(path) ? get(path).data.state : 'none';
+    }
+
+    function validReviewEvents(ev) {
+      return ev is list && ev.size() <= 20;
+    }
+
+    match /reviews/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list, delete: if isAdmin();
+      allow create: if (isAdmin() &&
+          incoming().state in ['watch', 'pending', 'cleared', 'suspended'] && incoming().trusted is bool) ||
+        (isSignedIn() && request.auth.uid == uid &&
+        incoming().keys().hasOnly(['uid', 'login', 'state', 'events', 'trusted', 'device', 'createdAt', 'updatedAt']) &&
+        incoming().uid == uid &&
+        incoming().login is string && incoming().login.size() <= 40 &&
+        incoming().state in ['watch', 'pending'] &&
+        incoming().trusted == false &&
+        validReviewEvents(incoming().events) &&
+        incoming().device is string && incoming().device.size() <= 40 &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time);
+      allow update: if
+        (isAdmin() &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['state', 'trusted', 'note', 'decidedAt', 'updatedAt']) &&
+          incoming().state in ['watch', 'pending', 'cleared', 'suspended'] &&
+          incoming().trusted is bool) ||
+        (isSignedIn() && request.auth.uid == uid &&
+          existing().trusted != true &&
+          existing().state in ['watch', 'pending', 'cleared'] &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['state', 'events', 'device', 'updatedAt']) &&
+          incoming().state in ['watch', 'pending'] &&
+          !(existing().state == 'pending' && incoming().state == 'watch') &&
+          validReviewEvents(incoming().events) &&
+          incoming().device is string && incoming().device.size() <= 40 &&
+          incoming().updatedAt == request.time);
+    }
+
     // 5. Login → identyfikator profilu (potrzebny, by na nowym urządzeniu sprawdzić hasło).
     match /logins/{login} {
       allow get: if login.size() <= 40;
@@ -133,7 +174,8 @@ service cloud.firestore {
         incoming().uid == uid &&
         incoming().login is string && incoming().login.size() >= 1 && incoming().login.size() <= 32 &&
         incoming().profile is map &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time &&
+        reviewState(uid) != 'suspended';
       allow delete: if isSignedIn() && request.auth.uid == uid;
     }
 
@@ -201,7 +243,8 @@ service cloud.firestore {
           (!('recentSeries' in incoming()) || (incoming().recentSeries is list && incoming().recentSeries.size() <= 12)) &&
           incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 32 &&
           incoming().xp is number && incoming().xp >= 0 && incoming().xp <= 10000000 &&
-          incoming().updatedAt == request.time;
+          incoming().updatedAt == request.time &&
+          !(reviewState(playerUid) in ['pending', 'suspended']);
         allow delete: if isSignedIn() && playerUid == request.auth.uid;
       }
     }

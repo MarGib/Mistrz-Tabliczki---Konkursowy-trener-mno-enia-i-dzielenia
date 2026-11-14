@@ -18,6 +18,15 @@ export interface ReleaseNote {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: '2026-11-15b',
+    date: '15 listopada 2026',
+    title: 'Uczciwa gra',
+    items: [
+      { emoji: '🛡️', text: 'Rankingi są uczciwe: aplikacja zauważa serie grane przez automat albo z podpowiedziami i przekazuje je opiekunowi do sprawdzenia.' },
+      { emoji: '🙂', text: 'Szybkie liczenie z pamięci jest super — nikt nie jest za nie karany, a w czasie sprawdzania można dalej grać.' },
+    ],
+  },
+  {
     id: '2026-11-15',
     date: '15 listopada 2026',
     title: 'Ścieżka z kropkami, gry i wolny trening',
