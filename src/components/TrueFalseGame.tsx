@@ -15,12 +15,18 @@ interface Props {
   soundEnabled: boolean;
   onCompleteSession: (session: SessionRecord, attempts: TaskAttempt[]) => void;
   onExit: () => void;
+  /** Zaliczona kropka → od razu następna kropka ścieżki. */
+  onContinue?: () => void;
 }
 
 /** Gra „Prawda czy fałsz”: 60 sekund, dwa wielkie przyciski. Uczy wyłapywać „prawie dobre” wyniki. */
-export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSession, onExit }: Props) {
+export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSession, onExit, onContinue }: Props) {
   const [round, setRound] = useState(0);
-  const problems = useMemo(() => buildSeriesProblems({ ...config, gap: false, story: false }, memories), [config, memories, round]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Zadania losujemy raz na rundę. Pamięć z chwili startu — synchronizacja w tle
+  // (nowy obiekt postępów) nie może podmieniać pytania, na które dziecko jeszcze nie odpowiedziało.
+  const memoriesRef = useRef(memories);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const problems = useMemo(() => buildSeriesProblems({ ...config, gap: false, story: false }, memoriesRef.current), [config, round]);
   const shown = useMemo(() => problems.map((p) => (Math.random() < 0.5 ? p.answer : nearMiss(p))), [problems]);
   const [idx, setIdx] = useState(0);
   const [attempts, setAttempts] = useState<TaskAttempt[]>([]);
@@ -110,7 +116,9 @@ export function TrueFalseGame({ config, memories, soundEnabled, onCompleteSessio
           stars={lessonStars(session, config)}
           summary={`Dobrze oceniono ${session.correctTasks} z ${session.totalTasks} działań (${session.accuracyPct}%). Cel: co najmniej ${config.passMinCorrect ?? 10} i 80%.`}
           onExit={onExit}
+          onContinue={onContinue}
           onAgain={() => {
+            memoriesRef.current = memories;
             setRound((r) => r + 1);
             setIdx(0);
             setAttempts([]);

@@ -18,6 +18,9 @@ import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
 import { AppStatusLayer } from './components/AppStatusLayer';
 import { FairPlayNotice } from './components/FairPlayNotice';
+import { NextDotSplash } from './components/NextDotSplash';
+import { findLesson } from './data/path';
+import { type PathStep, nextPathStep } from './engine/nextStep';
 import { WhatsNewDialog, markReleaseSeen } from './components/WhatsNewDialog';
 import { HowWePlayDialog, playedBeforePath, rulesSeen } from './components/HowWePlayDialog';
 import { GuidedTour } from './help/GuidedTour';
@@ -176,7 +179,48 @@ export default function App() {
     });
   };
 
+  // „Dalej po ścieżce”: od razu następna kropka (z krótkim ekranem „co teraz”), a po wyjściu
+  // z kropki — powrót dokładnie do bieżącego miejsca na ścieżce, a nie na górę strony.
+  const [pathSplash, setPathSplash] = useState<{ step: PathStep; newModule: boolean } | null>(null);
+  const scrollToCurrentDot = () => {
+    let tries = 0;
+    const tick = () => {
+      const el = document.querySelector('[data-current-dot]') ?? document.querySelector('[data-testid=module-path]');
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      else if (tries++ < 20) window.setTimeout(tick, 60);
+    };
+    window.setTimeout(tick, 60);
+  };
+  const exitSeries = () => {
+    const wasPath = Boolean(activeSeries?.lessonId || activeSeries?.stageId);
+    setActiveSeries(null);
+    setPathSplash(null);
+    if (wasPath) {
+      setActiveTab('trening');
+      scrollToCurrentDot();
+    }
+  };
+  const continuePath = () => {
+    const prevStage = activeSeries?.stageId ?? (activeSeries?.lessonId ? findLesson(activeSeries.lessonId)?.stageId : undefined);
+    const step = nextPathStep(activeProfile);
+    if (!step) {
+      exitSeries();
+      return;
+    }
+    const newModule = Boolean(prevStage && prevStage !== step.stageId);
+    if (step.config.intro && !newModule) {
+      // Kropka „Poznaj” ma własną kartę powitalną — startujemy od razu.
+      setPathSplash(null);
+      setActiveSeries(step.config);
+      window.scrollTo(0, 0);
+      return;
+    }
+    setActiveSeries(null);
+    setPathSplash({ step, newModule });
+  };
+
   const handleSelectTab = (tab: NavTab) => {
+    setPathSplash(null);
     setActiveTab(tab);
     window.scrollTo(0, 0);
   };
@@ -327,7 +371,8 @@ export default function App() {
                 memories={activeProfile.memories}
                 soundEnabled={activeProfile.settings.soundEnabled}
                 onCompleteSession={recordCompletedSession}
-                onExit={() => setActiveSeries(null)}
+                onExit={exitSeries}
+                onContinue={continuePath}
               />
             ) : activeSeries?.game === 'pairs' ? (
               <PairsGame
@@ -336,11 +381,12 @@ export default function App() {
                 memories={activeProfile.memories}
                 soundEnabled={activeProfile.settings.soundEnabled}
                 onCompleteSession={recordCompletedSession}
-                onExit={() => setActiveSeries(null)}
+                onExit={exitSeries}
+                onContinue={continuePath}
               />
             ) : activeSeries ? (
               <ExerciseArena
-                key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}
+                key={`${activeSeries.lessonId ?? activeSeries.stageId ?? ''}-${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}
                 config={activeSeries}
                 pastSessions={activeProfile.sessions}
                 memories={activeProfile.memories}
@@ -357,8 +403,25 @@ export default function App() {
                 themeAccent={activeTheme.tokens.accent}
                 onUpdateSettings={updateSettings}
                 onCompleteSession={recordCompletedSession}
-                onExit={() => setActiveSeries(null)}
+                onExit={exitSeries}
+                onContinue={continuePath}
                 onRestartWithFocus={handleRestartWithFocus}
+              />
+            ) : pathSplash ? (
+              <NextDotSplash
+                key={pathSplash.step.config.lessonId ?? pathSplash.step.stageId}
+                step={pathSplash.step}
+                newModule={pathSplash.newModule}
+                onStart={() => {
+                  setActiveSeries(pathSplash.step.config);
+                  setPathSplash(null);
+                  window.scrollTo(0, 0);
+                }}
+                onBack={() => {
+                  setPathSplash(null);
+                  setActiveTab('trening');
+                  scrollToCurrentDot();
+                }}
               />
             ) : activeTab === 'trening' ? (
               <TrainingHome

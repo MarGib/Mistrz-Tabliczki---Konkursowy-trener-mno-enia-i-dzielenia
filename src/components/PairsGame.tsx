@@ -15,15 +15,19 @@ interface Props {
   soundEnabled: boolean;
   onCompleteSession: (session: SessionRecord, attempts: TaskAttempt[]) => void;
   onExit: () => void;
+  /** Zaliczona kropka → od razu następna kropka ścieżki. */
+  onContinue?: () => void;
 }
 
 /** Gra „Pary”: połącz działanie z wynikiem. Odpoczynek od klawiatury, uczy kojarzenia. */
-export function PairsGame({ config, memories, soundEnabled, onCompleteSession, onExit }: Props) {
+export function PairsGame({ config, memories, soundEnabled, onCompleteSession, onExit, onContinue }: Props) {
+  // Pamięć z chwili startu — synchronizacja w tle nie może przetasować planszy w trakcie gry.
+  const memoriesRef = useRef(memories);
   const n = config.taskCount || 6;
   const [round, setRound] = useState(0);
   const problems: MathProblem[] = useMemo(
-    () => distinctAnswers(buildSeriesProblems({ ...config, gap: false, story: false, taskCount: n * 3 }, memories), n),
-    [config, memories, n, round] // eslint-disable-line react-hooks/exhaustive-deps
+    () => distinctAnswers(buildSeriesProblems({ ...config, gap: false, story: false, taskCount: n * 3 }, memoriesRef.current), n),
+    [config, n, round] // eslint-disable-line react-hooks/exhaustive-deps
   );
   const answers = useMemo(() => shuffle(problems.map((p) => p.answer)), [problems]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -113,7 +117,9 @@ export function PairsGame({ config, memories, soundEnabled, onCompleteSession, o
           stars={lessonStars(session, config)}
           summary={`Połączono ${matched.size} z ${problems.length} par${mistakes ? `, pomyłki przy ${mistakes}` : ' bez pomyłki'}.`}
           onExit={onExit}
+          onContinue={onContinue}
           onAgain={() => {
+            memoriesRef.current = memories;
             setRound((r) => r + 1);
             setMatched(new Set());
             setErrored(new Set());

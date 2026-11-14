@@ -8,12 +8,14 @@ export function GameResult({
   summary,
   onExit,
   onAgain,
+  onContinue,
 }: {
   session: SessionRecord;
   stars: number;
   summary: string;
   onExit: () => void;
   onAgain: () => void;
+  onContinue?: () => void;
 }) {
   const ok = session.passedThreshold;
   return (
@@ -34,11 +36,11 @@ export function GameResult({
         </button>
         <button
           type="button"
-          onClick={onExit}
+          onClick={ok && onContinue ? onContinue : onExit}
           className="min-h-[52px] rounded-2xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] font-bold border-b-4 border-[var(--th-primary-dark)] inline-flex items-center justify-center gap-2 cursor-pointer"
           data-testid="game-continue"
         >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {ok ? 'Dalej po ścieżce' : 'Wróć'}
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {ok ? 'Dalej po ścieżce' : 'Wróć do ścieżki'}
         </button>
       </div>
     </div>

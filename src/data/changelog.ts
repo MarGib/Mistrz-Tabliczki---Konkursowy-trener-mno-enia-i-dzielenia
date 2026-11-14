@@ -18,6 +18,16 @@ export interface ReleaseNote {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: '2026-11-15c',
+    date: '15 listopada 2026',
+    title: 'Płynniej po ścieżce',
+    items: [
+      { emoji: '➡️', text: '„Dalej po ścieżce” od razu prowadzi do następnej kropki — z krótkim ekranem, co teraz robimy.' },
+      { emoji: '📍', text: 'Po wyjściu z kropki wracasz dokładnie do swojego miejsca na ścieżce.' },
+      { emoji: '✅', text: '„Prawda czy fałsz” i „Pary” nie zmieniają już pytań, zanim odpowiesz.' },
+    ],
+  },
+  {
     id: '2026-11-15b',
     date: '15 listopada 2026',
     title: 'Uczciwa gra',

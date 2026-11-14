@@ -68,6 +68,8 @@ interface ExerciseArenaProps {
   onUpdateSettings?: (partial: Partial<AppSettings>) => void;
   onCompleteSession: (session: SessionRecord, attempts: TaskAttempt[]) => void;
   onExit: () => void;
+  /** Zaliczona kropka/test na ścieżce → od razu następny krok ścieżki. */
+  onContinue?: () => void;
   onRestartWithFocus: (focusIds: string[], title: string) => void;
   /** Wcześniejsze serie gracza (do rekordów osobistych). */
   pastSessions?: SessionRecord[];
@@ -105,6 +107,7 @@ export function ExerciseArena({
   onUpdateSettings,
   onCompleteSession,
   onExit,
+  onContinue,
   onRestartWithFocus,
   pastSessions,
 }: ExerciseArenaProps) {
@@ -809,10 +812,19 @@ export function ExerciseArena({
           <div className="relative z-10 mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <button
               type="button"
-              onClick={onExit}
-              className="px-5 py-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface-muted)] text-[var(--th-text)] font-semibold hover:opacity-90 transition-colors cursor-pointer"
+              onClick={(config.lessonId || config.stageId) && passed && onContinue ? onContinue : onExit}
+              className={
+                (config.lessonId || config.stageId) && passed && onContinue
+                  ? 'px-5 py-3 rounded-xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] font-bold border-b-4 border-[var(--th-primary-dark)] hover:opacity-90 transition-colors cursor-pointer'
+                  : 'px-5 py-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface-muted)] text-[var(--th-text)] font-semibold hover:opacity-90 transition-colors cursor-pointer'
+              }
+              data-testid="arena-continue"
             >
-              {config.lessonId && passed ? "Dalej po ścieżce" : "Wróć do panelu"}
+              {(config.lessonId || config.stageId) && passed && onContinue
+                ? 'Dalej po ścieżce →'
+                : config.lessonId || config.stageId
+                ? 'Wróć do ścieżki'
+                : 'Wróć do panelu'}
             </button>
 
             <div className="flex flex-col sm:flex-row gap-3">

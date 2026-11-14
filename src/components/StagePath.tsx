@@ -181,7 +181,7 @@ function ModulePath({ module: m, profile, onStart }: { module: ModuleView; profi
           const locked = d.state === 'locked';
           const done = d.state === 'done';
           return (
-            <li key={d.key} className={`flex items-center gap-3 ${offset}`}>
+            <li key={d.key} className={`flex items-center gap-3 scroll-mt-24 ${offset}`} data-current-dot={d.current ? '1' : undefined}>
               <button
                 type="button"
                 disabled={locked}
