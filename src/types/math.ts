@@ -66,6 +66,9 @@ export interface SessionRecord {
   seriesTitle: string;
   stageId?: string;
   tournamentId?: string;
+  maxRange?: number;
+  masterLevel?: number;
+  targetAvgTimeSec?: number;
   totalTasks: number;
   correctTasks: number;
   accuracyPct: number;
@@ -218,6 +221,8 @@ export interface UserProfile {
   id: string;
   /** Tylko dla graczy z grupy: ostatnie serie odtworzone z karty wyników (do wykresu tendencji). */
   trendSessions?: SessionRecord[];
+  /** Najwyższy zaliczony poziom Wyzwania Mistrza (0 = żaden). */
+  masterLevel?: number;
   ownerUid?: string;
   name: string;
   schoolName?: string;
@@ -315,4 +320,6 @@ export interface ActiveSeriesConfig {
   passAccuracyPct?: number;
   focusFactIds?: string[];
   targetAvgTimeSec?: number;
+  /** Wyzwanie Mistrza: numer poziomu (seria zaliczona = awans). */
+  masterLevel?: number;
 }

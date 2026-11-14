@@ -346,6 +346,7 @@ export function mergeSingleProfile(
     leftCircleIds: Array.from(new Set([...(local.leftCircleIds ?? []), ...(cloud.leftCircleIds ?? [])])).slice(-50),
     login: local.login ?? merged.login,
     passwordHash: local.passwordHash ?? merged.passwordHash,
+    masterLevel: Math.max(local.masterLevel ?? 0, cloud.masterLevel ?? 0) || undefined,
   };
 }
 

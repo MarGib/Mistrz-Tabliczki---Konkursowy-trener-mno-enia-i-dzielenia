@@ -851,6 +851,13 @@ export function useAppStore() {
           }
         }
 
+        let masterLevel = activeBefore.masterLevel ?? 0;
+        if (session.masterLevel && session.passedThreshold && session.masterLevel > masterLevel) {
+          masterLevel = session.masterLevel;
+          bonusXp += 150 + (session.masterLevel - 1) * 40;
+          if (masterLevel >= 5) addBadge('Wyzwanie Mistrza');
+        }
+
         const nextTournamentBests = { ...activeBefore.tournamentBests };
         if (session.tournamentId) {
           const tourney = TOURNAMENTS.find((t) => t.id === session.tournamentId);
@@ -900,6 +907,7 @@ export function useAppStore() {
           unlockedStageIds: Array.from(unlockedStageIds),
           completedStageIds: Array.from(completedStageIds),
           earnedBadges: Array.from(earnedBadges),
+          masterLevel,
           memories: nextMemories,
           sessions: [...activeBefore.sessions, session].slice(-40),
           tournamentBests: nextTournamentBests,

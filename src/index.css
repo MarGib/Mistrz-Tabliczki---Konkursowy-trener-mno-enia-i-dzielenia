@@ -48,3 +48,25 @@
     animation: none;
   }
 }
+
+/* Druk certyfikatu: tylko obrazek, A4 poziomo, bez marginesów. */
+#mt-print-cert {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+  body > *:not(#mt-print-cert) {
+    display: none !important;
+  }
+  #mt-print-cert {
+    display: block !important;
+  }
+  #mt-print-cert img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+}

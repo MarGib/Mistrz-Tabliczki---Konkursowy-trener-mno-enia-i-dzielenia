@@ -21,6 +21,7 @@ import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
 import { AdminPanel } from './components/AdminPanel';
+import { MyCertificates } from './components/MyCertificates';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
 
 function detectCurrentDevice(): DeviceProfile {
@@ -235,7 +236,7 @@ export default function App() {
             />
           )}
 
-          <main className={`flex-1 ${!activeSeries ? 'pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-8' : 'pb-6'}`}>
+          <main className={`flex-1 ${!activeSeries ? 'pb-[calc(5.5rem+var(--mt-install-h,0px)+env(safe-area-inset-bottom))] md:pb-[calc(2rem+var(--mt-install-h,0px))]' : 'pb-6'}`}>
             {!activeSeries && <InstallBanner />}
             {!activeSeries && (
               <InviteCard
@@ -296,6 +297,13 @@ export default function App() {
                 cloudError={cloudError}
                 onStartTournament={(cfg) => setActiveSeries(cfg)}
               />
+              <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 pb-6">
+                <MyCertificates
+                  profile={activeProfile}
+                  primaryColor={activeTheme.tokens.primary}
+                  accentColor={activeTheme.tokens.accent}
+                />
+              </div>
               </>
             ) : activeTab === 'statystyki' ? (
               <>

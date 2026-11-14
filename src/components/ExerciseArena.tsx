@@ -35,6 +35,9 @@ import {
   computeTournamentMedal,
 } from '../engine/spacedRepetition';
 import { LEVEL_STAGES, TOURNAMENTS } from '../data/curriculum';
+import { isMasterChallengePassed } from '../engine/masterChallenge';
+import type { CertificateData } from '../engine/certificateCanvas';
+import { CertificateDialog } from './CertificateDialog';
 import {
   playTone,
   startBackgroundMusic,
@@ -97,6 +100,7 @@ export function ExerciseArena({
   const [bestStreak, setBestStreak] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
   const [showHint, setShowHint] = useState(false);
+  const [certOpen, setCertOpen] = useState(false);
   const [hintAutoTriggered, setHintAutoTriggered] = useState(false);
   // Użytkownik zwinął podpowiedź w tym zadaniu — nie otwieraj jej ponownie automatycznie.
   const [hintDismissed, setHintDismissed] = useState(false);
@@ -238,11 +242,16 @@ export function ExerciseArena({
           const totalTimeMs = nextAttempts.reduce((acc, a) => acc + a.timeMs, 0);
           const correctTasks = nextAttempts.filter((a) => a.isCorrect).length;
           const thresholdPct = config.passAccuracyPct ?? 70;
-          const { accuracyPct, passed } = checkStagePass(
-            correctTasks,
-            nextAttempts.length,
-            thresholdPct
-          );
+          const stagePass = checkStagePass(correctTasks, nextAttempts.length, thresholdPct);
+          const accuracyPct = stagePass.accuracyPct;
+          const passed = config.masterLevel
+            ? isMasterChallengePassed(
+                accuracyPct,
+                nextAttempts.length > 0 ? totalTimeMs / nextAttempts.length : 0,
+                thresholdPct,
+                config.targetAvgTimeSec ?? 99
+              )
+            : stagePass.passed;
           const earned = nextAttempts.reduce((acc, a) => acc + a.pointsEarned, 0);
 
           const session: SessionRecord = {
@@ -252,6 +261,9 @@ export function ExerciseArena({
             seriesTitle: config.title,
             stageId: config.stageId,
             tournamentId: config.tournamentId,
+            maxRange: config.maxRange,
+            masterLevel: config.masterLevel,
+            targetAvgTimeSec: config.targetAvgTimeSec,
             totalTasks: nextAttempts.length,
             correctTasks,
             accuracyPct,
@@ -417,7 +429,11 @@ export function ExerciseArena({
     const correctCount = attempts.filter((a) => a.isCorrect).length;
     const accuracyPct =
       attempts.length > 0 ? Math.round((correctCount / attempts.length) * 100) : 0;
-    const passed = config.passAccuracyPct ? accuracyPct >= config.passAccuracyPct : true;
+    const passed = config.masterLevel
+      ? isMasterChallengePassed(accuracyPct, avgTimeMs, config.passAccuracyPct ?? 85, config.targetAvgTimeSec ?? 99)
+      : config.passAccuracyPct
+      ? accuracyPct >= config.passAccuracyPct
+      : true;
 
     const sortedByTime = [...attempts].sort((a, b) => b.timeMs - a.timeMs);
     const hardOrSlowIds = Array.from(
@@ -434,6 +450,40 @@ export function ExerciseArena({
     const medal = tournament
       ? computeTournamentMedal(tournament, accuracyPct, Math.round(totalTimeMs / 1000))
       : null;
+
+    const stageDef = config.stageId ? LEVEL_STAGES.find((st) => st.id === config.stageId) : undefined;
+    const certificate: CertificateData | null =
+      tournament && medal && medal !== 'brak'
+        ? {
+            kind: 'tournament',
+            playerName,
+            title: tournament.title,
+            distinction: { puchar: 'Puchar Mistrza', zloto: 'Złoty Medal', srebro: 'Srebrny Medal', braz: 'Brązowy Medal' }[medal],
+            accuracyPct,
+            tasks: attempts.length,
+            totalTimeSec: totalTimeMs / 1000,
+            avgTimeSec: avgTimeMs / 1000,
+            maxRange: config.maxRange,
+            dateMs: Date.now(),
+            primaryColor: themePrimary,
+            accentColor: themeAccent,
+          }
+        : passed && (stageDef || config.masterLevel)
+        ? {
+            kind: stageDef ? 'stage' : 'master',
+            playerName,
+            title: stageDef ? stageDef.title : config.title,
+            distinction: stageDef?.badgeName,
+            accuracyPct,
+            tasks: attempts.length,
+            avgTimeSec: avgTimeMs / 1000,
+            totalTimeSec: totalTimeMs / 1000,
+            maxRange: config.maxRange,
+            dateMs: Date.now(),
+            primaryColor: themePrimary,
+            accentColor: themeAccent,
+          }
+        : null;
 
     const medalLabels: Record<string, string> = {
       puchar: 'Puchar Mistrza (100% + Złoty Czas)',
@@ -469,6 +519,13 @@ export function ExerciseArena({
                 <p className="mt-1 text-sm text-[var(--th-text-muted)]">
                   Próg przejścia: <strong className="tabular-nums text-[var(--th-text)]">{config.passAccuracyPct}%</strong>{' '}
                   · Twój wynik: <strong className="tabular-nums text-[var(--th-text)]">{accuracyPct}%</strong>
+                </p>
+              )}
+              {config.masterLevel && config.targetAvgTimeSec && (
+                <p className="mt-1 text-sm text-[var(--th-text-muted)]">
+                  Limit tempa: <strong className="tabular-nums text-[var(--th-text)]">{config.targetAvgTimeSec.toFixed(1).replace('.', ',')} s</strong>{' '}
+                  · Twoje tempo: <strong className="tabular-nums text-[var(--th-text)]">{formatSeconds(avgTimeMs)} s</strong>
+                  {passed && <span className="block font-bold text-[var(--th-primary)]">Awans! Następny poziom Wyzwania Mistrza odblokowany.</span>}
                 </p>
               )}
               {medal && (
@@ -555,6 +612,26 @@ export function ExerciseArena({
               }}
             />
           </div>
+
+          {certificate && (
+            <div className="relative z-10 mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
+              <div className="flex items-center gap-3">
+                <Award className="w-8 h-8 text-amber-600 shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="font-display font-extrabold">Zdobyto certyfikat!</p>
+                  <p className="text-sm">Wydrukuj go albo pokaż rodzinie — z Twoim imieniem i wynikiem.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCertOpen(true)}
+                className="min-h-[44px] px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Award className="w-4 h-4" aria-hidden="true" /> Zobacz certyfikat
+              </button>
+            </div>
+          )}
+          {certOpen && certificate && <CertificateDialog data={certificate} onClose={() => setCertOpen(false)} />}
 
           {/* Per-Task Timing Breakdown */}
           <div className="relative z-10">

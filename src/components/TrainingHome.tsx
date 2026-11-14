@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import heroBannerImg from '../assets/images/hero_contest_banner_1794652992683.jpg';
 import { LEVEL_STAGES } from '../data/curriculum';
+import { MasterChallengeCard } from './MasterChallengeCard';
 import { hasAccountPassword } from '../engine/accountSecurity';
 import {
   buildPlayerDiagnostics,
@@ -745,10 +746,29 @@ export function TrainingHome({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <MasterChallengeCard
+          profile={profile}
+          pathDone={LEVEL_STAGES.every((s) => profile.completedStageIds.includes(s.id))}
+          onStart={onStartSeries}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
           {LEVEL_STAGES.map((stage) => {
-            const isUnlocked = profile.unlockedStageIds.includes(stage.id);
+            const prevStage = LEVEL_STAGES.find((s) => s.order === stage.order - 1);
+            const isUnlocked =
+              profile.unlockedStageIds.includes(stage.id) ||
+              Boolean(prevStage && profile.completedStageIds.includes(prevStage.id));
             const isCompleted = profile.completedStageIds.includes(stage.id);
+            const ligaHeader =
+              stage.order === 7 ? (
+                <div key="liga-header" className="md:col-span-2 lg:col-span-3 mt-2 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-[var(--th-border)]" />
+                  <span className="font-display text-base sm:text-lg font-extrabold text-[var(--th-text)] inline-flex items-center gap-2">
+                    👑 Liga Mistrzów — zadania ponad setkę
+                  </span>
+                  <span className="h-px flex-1 bg-[var(--th-border)]" />
+                </div>
+              ) : null;
 
             const modeText =
               stage.mode === 'mul'
@@ -757,7 +777,8 @@ export function TrainingHome({
                 ? 'Dzielenie'
                 : 'Mieszany';
 
-            return (
+            return [
+              ligaHeader,
               <div
                 key={stage.id}
                 className={`rounded-2xl border p-5 flex flex-col justify-between transition-all ${
@@ -836,8 +857,8 @@ export function TrainingHome({
                   </span>
                   {isUnlocked && <ChevronRight className="w-4 h-4" aria-hidden="true" />}
                 </button>
-              </div>
-            );
+              </div>,
+            ];
           })}
         </div>
       </section>

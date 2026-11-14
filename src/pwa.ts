@@ -49,6 +49,25 @@ export function isStandalone(): boolean {
 export function isIos(): boolean {
   return (
     /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    // iPadOS przedstawia się jako Mac — rozpoznajemy go po ekranie dotykowym.
+    ((navigator.platform === 'MacIntel' || /Macintosh/.test(navigator.userAgent)) && navigator.maxTouchPoints > 1)
   );
+}
+
+export type InstallPlatform =
+  | 'prompt' // przeglądarka sama pokaże okno instalacji (Chrome/Edge/Samsung na Androidzie i komputerze)
+  | 'ios-safari'
+  | 'ios-other' // Chrome/Firefox/Edge na iPhonie/iPadzie — też przez „Udostępnij”
+  | 'in-app' // przeglądarka wbudowana w Messengera/Facebooka/Instagram — trzeba otworzyć w Safari/Chrome
+  | 'android-menu' // Android bez okna instalacji — przez menu ⋮
+  | 'none';
+
+export function detectInstallPlatform(hasPrompt: boolean): InstallPlatform {
+  if (isStandalone()) return 'none';
+  const ua = navigator.userAgent;
+  if (/FBAN|FBAV|FB_IAB|Instagram|Messenger|Line\/|MicroMessenger|; wv\)/i.test(ua)) return 'in-app';
+  if (hasPrompt) return 'prompt';
+  if (isIos()) return /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua) ? 'ios-other' : 'ios-safari';
+  if (/Android/i.test(ua)) return 'android-menu';
+  return 'none';
 }
