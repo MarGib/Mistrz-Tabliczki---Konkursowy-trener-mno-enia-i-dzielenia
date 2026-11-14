@@ -22,6 +22,7 @@ import {
 import heroBannerImg from '../assets/images/hero_contest_banner_1794652992683.jpg';
 import { LEVEL_STAGES } from '../data/curriculum';
 import { MasterChallengeCard } from './MasterChallengeCard';
+import { StagePath } from './StagePath';
 import { hasAccountPassword } from '../engine/accountSecurity';
 import {
   buildPlayerDiagnostics,
@@ -746,121 +747,22 @@ export function TrainingHome({
           </div>
         </div>
 
-        <MasterChallengeCard
-          profile={profile}
-          pathDone={LEVEL_STAGES.every((s) => profile.completedStageIds.includes(s.id))}
-          onStart={onStartSeries}
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-          {LEVEL_STAGES.map((stage) => {
-            const prevStage = LEVEL_STAGES.find((s) => s.order === stage.order - 1);
-            const isUnlocked =
-              profile.unlockedStageIds.includes(stage.id) ||
-              Boolean(prevStage && profile.completedStageIds.includes(prevStage.id));
-            const isCompleted = profile.completedStageIds.includes(stage.id);
-            const ligaHeader =
-              stage.order === 7 ? (
-                <div key="liga-header" className="md:col-span-2 lg:col-span-3 mt-2 flex items-center gap-3">
-                  <span className="h-px flex-1 bg-[var(--th-border)]" />
-                  <span className="font-display text-base sm:text-lg font-extrabold text-[var(--th-text)] inline-flex items-center gap-2">
-                    👑 Liga Mistrzów — zadania ponad setkę
-                  </span>
-                  <span className="h-px flex-1 bg-[var(--th-border)]" />
-                </div>
-              ) : null;
-
-            const modeText =
-              stage.mode === 'mul'
-                ? 'Mnożenie'
-                : stage.mode === 'div'
-                ? 'Dzielenie'
-                : 'Mieszany';
-
-            return [
-              ligaHeader,
-              <div
-                key={stage.id}
-                className={`rounded-2xl border p-5 flex flex-col justify-between transition-all ${
-                  isCompleted
-                    ? 'bg-[var(--th-soft-tint)] border-[var(--th-soft-tint-border)]'
-                    : isUnlocked
-                    ? 'bg-[var(--th-surface)] border-[var(--th-border)] shadow-sm'
-                    : 'bg-[var(--th-surface-muted)] border-[var(--th-border)] opacity-75'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 text-xs font-semibold text-[var(--th-text-muted)]">
-                    <span>
-                      Poziom {stage.order} · {modeText} do {stage.maxRange}
-                    </span>
-                    {isCompleted ? (
-                      <span className="inline-flex items-center gap-1 text-[var(--th-primary)] font-bold">
-                        <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                        Zaliczony
-                      </span>
-                    ) : !isUnlocked ? (
-                      <span className="inline-flex items-center gap-1 text-[var(--th-text-muted)]">
-                        <Lock className="w-3.5 h-3.5" aria-hidden="true" />
-                        Zablokowany
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[var(--th-primary)] font-bold">
-                        <Target className="w-3.5 h-3.5" aria-hidden="true" />
-                        Aktywny
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="mt-2 font-display text-lg font-bold text-[var(--th-text)]">
-                    {stage.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-[var(--th-text-muted)]">{stage.subtitle}</p>
-
-                  <div className="mt-3 pt-3 border-t border-[var(--th-border)] flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-[var(--th-text-muted)] tabular-nums">
-                    <span>{stage.taskCount} zadań</span>
-                    <span aria-hidden="true">·</span>
-                    <span>Próg: {stage.passAccuracyPct}%</span>
-                    <span aria-hidden="true">·</span>
-                    <span>Nagroda: +{stage.rewardXp} XP</span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={!isUnlocked}
-                  onClick={() =>
-                    onStartSeries({
-                      title: stage.title,
-                      mode: stage.mode,
-                      maxRange: stage.maxRange,
-                      taskCount: stage.taskCount,
-                      stageId: stage.id,
-                      passAccuracyPct: stage.passAccuracyPct,
-                      targetAvgTimeSec: stage.targetAvgTimeSec,
-                    })
-                  }
-                  className={`mt-4 w-full min-h-[44px] px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all ${
-                    isUnlocked
-                      ? isCompleted
-                        ? 'bg-[var(--th-surface)] hover:opacity-90 text-[var(--th-text)] border border-[var(--th-border)] cursor-pointer'
-                        : 'bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] border-b-4 border-[var(--th-primary-dark)] active:border-b-2 active:translate-y-[2px] cursor-pointer'
-                      : 'bg-[var(--th-surface-muted)] text-[var(--th-text-muted)] border border-[var(--th-border)] cursor-not-allowed'
-                  }`}
-                >
-                  <span>
-                    {isCompleted
-                      ? 'Powtórz etap'
-                      : isUnlocked
-                      ? 'Wejdź do etapu'
-                      : 'Ukończ poprzedni etap'}
-                  </span>
-                  {isUnlocked && <ChevronRight className="w-4 h-4" aria-hidden="true" />}
-                </button>
-              </div>,
-            ];
-          })}
-        </div>
+        {(() => {
+          const pathDone = LEVEL_STAGES.every((st) => profile.completedStageIds.includes(st.id));
+          const master = <MasterChallengeCard profile={profile} pathDone={pathDone} onStart={onStartSeries} />;
+          // Po ukończeniu ścieżki Wyzwanie Mistrza jest na górze — to główna zabawa.
+          return pathDone ? (
+            <div className="space-y-4">
+              {master}
+              <StagePath profile={profile} onStart={onStartSeries} />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <StagePath profile={profile} onStart={onStartSeries} />
+              {master}
+            </div>
+          );
+        })()}
       </section>
     </div>
   );

@@ -1340,18 +1340,14 @@ export function useAppStore() {
         if (accountSync[p.id]?.state !== 'synced') continue;
         const fp = accountFingerprint(p);
         if (pushedAccountFpRef.current.get(p.id) === fp) continue;
-        const last = lastPushAtRef.current.get(p.id) ?? 0;
-        if (now - last < 5000) {
-          retryIn = Math.max(retryIn, 5000 - (now - last));
-          continue;
-        }
+        // Odstęp między zapisami: zwykle 5 s; gdy ktoś gra bardzo dużo serii pod rząd
+        // (>20 zapisów w 10 min) — zwalniamy do 1 zapisu na minutę, ale NIGDY nie wstrzymujemy.
+        // Zmiany i tak się łączą, więc nic nie ginie.
         const log = (pushLogRef.current.get(p.id) ?? []).filter((t) => now - t < 10 * 60_000);
-        if (log.length >= 20) {
-          console.warn('[Mistrz Tabliczki] Wstrzymano synchronizację — zbyt wiele zapisów.');
-          setSyncFor(p.id, {
-            state: 'error',
-            message: 'Synchronizacja wstrzymana na chwilę (za dużo zmian naraz). Odśwież stronę za kilka minut.',
-          });
+        const minGap = log.length >= 20 ? 60_000 : 5000;
+        const last = lastPushAtRef.current.get(p.id) ?? 0;
+        if (now - last < minGap) {
+          retryIn = Math.max(retryIn, minGap - (now - last));
           continue;
         }
         log.push(now);
