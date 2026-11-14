@@ -66,3 +66,31 @@ test('Panel: ocena bazy i hostingu', () => {
   assert.equal(h.level, 'ok');
   assert.ok(h.installsPerMonth > 10_000);
 });
+
+import { seriesInsight } from './seriesInsight';
+import { chooseNextStep, stageStatus } from './nextStep';
+import { createFreshProfile } from '../data/curriculum';
+
+const att = (a: number, b: number, ok: boolean, ms: number) => ({
+  problem: { id: `mul:${a}x${b}`, op: 'mul' as const, a, b, answer: a * b, display: `${a} × ${b}` },
+  isCorrect: ok,
+  timeMs: ms,
+  usedHint: false,
+});
+
+test('Wniosek po serii: błędy, wolne działanie, szybka seria', () => {
+  assert.equal(seriesInsight([att(7, 8, false, 3000), att(2, 3, true, 1000)]), 'Zapamiętaj: 7 × 8 = 56.');
+  assert.match(seriesInsight([att(7, 8, true, 9000), att(2, 3, true, 1000), att(2, 4, true, 1000)]) ?? '', /Najdłużej trwało 7 × 8 = 56 \(9,0 s\)/);
+  assert.match(seriesInsight([att(2, 3, true, 1500), att(2, 4, true, 1500)]) ?? '', /na pamięć/);
+  assert.equal(seriesInsight([]), null);
+});
+
+test('Graj dalej: nowy gracz dostaje etap 1, po ścieżce — Wyzwanie Mistrza', () => {
+  const p = createFreshProfile('Test', 'owl');
+  const s = chooseNextStep(p);
+  assert.equal(s.kind, 'stage');
+  assert.equal(s.config.stageId, p.unlockedStageIds[0] ?? s.config.stageId);
+  const all = [...stageStatus(p).keys()];
+  const done = { ...p, completedStageIds: all, unlockedStageIds: all };
+  assert.equal(chooseNextStep(done).kind, 'master');
+});

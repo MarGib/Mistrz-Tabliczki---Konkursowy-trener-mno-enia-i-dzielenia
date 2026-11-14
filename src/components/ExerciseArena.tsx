@@ -48,6 +48,7 @@ import { CelebrationBurst } from './CelebrationBurst';
 import { VictoryPosterCard } from './VictoryPosterCard';
 import { VisualHintCard } from './VisualHintCard';
 import { setGameActive } from '../autoUpdate';
+import { seriesInsight } from '../engine/seriesInsight';
 
 interface ExerciseArenaProps {
   config: ActiveSeriesConfig;
@@ -591,6 +592,13 @@ export function ExerciseArena({
               <div className="text-xs text-[var(--th-text-muted)]">Zadań do powtórki</div>
             </div>
           </div>
+
+          {/* Jeden konkretny wniosek z serii */}
+          {seriesInsight(attempts) && (
+            <p className="relative z-10 -mt-2 mb-6 rounded-2xl bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] px-4 py-3 text-sm sm:text-base font-semibold text-[var(--th-text)]" data-testid="series-insight">
+              💡 {seriesInsight(attempts)}
+            </p>
+          )}
 
           {/* Shareable Graphical Souvenir Card (WhatsApp / PNG / Social) */}
           <div className="relative z-10 mb-6">

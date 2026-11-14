@@ -18,6 +18,16 @@ export interface ReleaseNote {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: '2026-11-14b',
+    date: '14 listopada 2026',
+    title: 'Graj dalej jednym dotknięciem',
+    items: [
+      { emoji: '▶️', text: 'Nowy duży przycisk „Graj dalej” na górze ekranu sam wybiera, co dziś najlepiej ćwiczyć: powtórki, następny etap albo Wyzwanie Mistrza.' },
+      { emoji: '💡', text: 'Po każdej serii zobaczysz jedną wskazówkę, np. które działanie warto zapamiętać.' },
+      { emoji: '⚡', text: 'Aplikacja uruchamia się szybciej.' },
+    ],
+  },
+  {
     id: '2026-11-14',
     date: '14 listopada 2026',
     title: 'Pomoc jednym kliknięciem i spokojne aktualizacje',

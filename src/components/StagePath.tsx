@@ -5,6 +5,7 @@
 import { CheckCircle2, ChevronRight, Lock, Play, RotateCcw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { LEVEL_STAGES } from '../data/curriculum';
+import { stageStatus, stageToConfig } from '../engine/nextStep';
 import type { ActiveSeriesConfig, LevelStage, UserProfile } from '../types/math';
 
 interface StagePathProps {
@@ -21,30 +22,8 @@ function modeText(stage: LevelStage): string {
   return stage.mode === 'mul' ? 'Mnożenie' : stage.mode === 'div' ? 'Dzielenie' : 'Mix';
 }
 
-function toConfig(stage: LevelStage): ActiveSeriesConfig {
-  return {
-    title: stage.title,
-    mode: stage.mode,
-    maxRange: stage.maxRange,
-    taskCount: stage.taskCount,
-    stageId: stage.id,
-    passAccuracyPct: stage.passAccuracyPct,
-    targetAvgTimeSec: stage.targetAvgTimeSec,
-  };
-}
-
 export function StagePath({ profile, onStart }: StagePathProps) {
-  const status = useMemo(() => {
-    const map = new Map<string, 'done' | 'open' | 'locked'>();
-    for (const st of LEVEL_STAGES) {
-      const prev = LEVEL_STAGES.find((s) => s.order === st.order - 1);
-      const done = profile.completedStageIds.includes(st.id);
-      const open =
-        profile.unlockedStageIds.includes(st.id) || Boolean(prev && profile.completedStageIds.includes(prev.id));
-      map.set(st.id, done ? 'done' : open ? 'open' : 'locked');
-    }
-    return map;
-  }, [profile.completedStageIds, profile.unlockedStageIds]);
+  const status = useMemo(() => stageStatus(profile), [profile]);
 
   const next = LEVEL_STAGES.find((s) => status.get(s.id) === 'open') ?? null;
   const doneCount = LEVEL_STAGES.filter((s) => status.get(s.id) === 'done').length;
@@ -110,7 +89,7 @@ export function StagePath({ profile, onStart }: StagePathProps) {
           </div>
           <button
             type="button"
-            onClick={() => onStart(toConfig(featured))}
+            onClick={() => onStart(stageToConfig(featured))}
             className="shrink-0 min-h-[48px] px-5 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-bold inline-flex items-center justify-center gap-1.5 border-b-4 border-[var(--th-primary-dark)] active:border-b-2 active:translate-y-[2px] cursor-pointer"
           >
             <Play className="w-4 h-4" aria-hidden="true" /> Graj
@@ -131,7 +110,7 @@ export function StagePath({ profile, onStart }: StagePathProps) {
                 <button
                   type="button"
                   disabled={locked}
-                  onClick={() => onStart(toConfig(stage))}
+                  onClick={() => onStart(stageToConfig(stage))}
                   className={`w-full min-h-[56px] px-3 py-2 rounded-2xl border text-left flex items-center gap-3 transition-colors ${
                     done
                       ? 'bg-[var(--th-soft-tint)] border-[var(--th-soft-tint-border)] cursor-pointer hover:border-[var(--th-primary)]'
