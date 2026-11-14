@@ -259,13 +259,13 @@ export const HELP_SECTIONS: HelpSection[] = [
     lead: 'Grupę zakłada jedna osoba, a potem wysyła zaproszenie.',
     steps: [
       'Statystyki → „Dodaj grupę” (albo „Zarządzaj”, jeśli masz już jakąś grupę).',
-      'Wpisz nazwę, np. „Rodzinka G”, i naciśnij „Załóż”.',
+      'Wpisz nazwę, np. „Rodzina Nowaków”, i naciśnij „Załóż”.',
       'Pojawi się karta z kodem grupy. „Wyślij zaproszenie” — link SMS-em, WhatsAppem lub Messengerem.',
       'Kolejne osoby zaprosisz przyciskiem „Zaproś” obok kodu grupy.',
     ],
     image: 'help/grupa-zalozona.webp',
     imageAlt: 'Karta „Grupa gotowa” z kodem i przyciskiem Wyślij zaproszenie',
-    tip: 'Wystarczy przekazać link z zaproszenia. Bez linku podaj kod grupy, np. G-9GSVX.',
+    tip: 'Wystarczy przekazać link z zaproszenia. Bez linku podaj kod grupy, np. G-PRZYK.',
   },
   {
     id: 'group-join',

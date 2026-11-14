@@ -41,6 +41,8 @@ interface GroupsPanelProps {
   ) => Promise<{ ok: boolean; error?: string; circle?: CircleMembership }>;
   onJoinGroup: (code: string) => Promise<{ ok: boolean; error?: string }>;
   onLeaveGroup: (circleId: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Nowy kod zaproszenia (tylko założyciel grupy). */
+  onChangeCode?: (circleId: string) => Promise<{ ok: boolean; code?: string; error?: string }>;
   onSetShare: (circleId: string, share: boolean) => void;
   onOpenAccount: () => void;
   /** Tylko do zrzutów ekranu w instrukcji. */
@@ -62,6 +64,7 @@ export function GroupsPanel({
   onCreateGroup,
   onJoinGroup,
   onLeaveGroup,
+  onChangeCode,
   onSetShare,
   onOpenAccount,
   demoJustCreated,
@@ -411,6 +414,21 @@ export function GroupsPanel({
                             {c.share ? <Eye className="w-3.5 h-3.5" aria-hidden="true" /> : <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />}
                             {c.share ? 'Moje wyniki widoczne' : 'Moje wyniki ukryte'}
                           </button>
+                          {c.owner && onChangeCode && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              title="Stary kod przestanie działać. Osoby w grupie zostają."
+                              onClick={() => {
+                                if (window.confirm(`Zmienić kod grupy „${c.name}”? Stary kod ${c.code} przestanie działać, a osoby, które już są w grupie, zostaną.`)) {
+                                  void run(() => onChangeCode(c.id), () => {});
+                                }
+                              }}
+                              className="min-h-[38px] px-3 rounded-xl border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              Nowy kod
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={busy}

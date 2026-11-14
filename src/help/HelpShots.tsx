@@ -20,8 +20,8 @@ import type { CircleMembership } from '../types/math';
 
 const ok = async () => ({ ok: true });
 const circles: CircleMembership[] = [
-  { id: 'c1', name: 'Rodzinka G', code: 'G-9GSVX', share: true, owner: true },
-  { id: 'c2', name: 'Nasza paczka', code: 'G-K7P2M', share: false },
+  { id: 'c1', name: 'Rodzina Nowaków', code: 'G-PRZYK', share: true, owner: true },
+  { id: 'c2', name: 'Nasza paczka', code: 'G-DEMO1', share: false },
 ];
 
 const NOW = Date.now();
@@ -54,7 +54,7 @@ function CertificateShot() {
   const c = document.createElement('canvas');
   renderCertificate(c, {
     kind: 'tournament',
-    playerName: 'Ola',
+    playerName: 'Hania',
     title: 'Wielki Finał Konkursowy',
     distinction: 'Złoty Medal',
     accuracyPct: 100,
@@ -74,11 +74,11 @@ export function HelpShots() {
     document.documentElement.style.setProperty(k, v);
   }
   try {
-    window.localStorage.setItem('mt_pending_invite', 'G-9GSVX');
+    window.localStorage.setItem('mt_pending_invite', 'G-PRZYK');
   } catch {
     // ignore
   }
-  const demo = { ...createFreshProfile('Ola', 'owl'), login: 'ola', passwordHash: 'x' };
+  const demo = { ...createFreshProfile('Hania', 'owl'), login: 'hania', passwordHash: 'x' };
   const panelProps = {
     circles,
     selectedCircleId: 'c1',
@@ -136,10 +136,10 @@ export function HelpShots() {
       </div>
       <div id="shot-wyzwania-w-grupie" className="px-1 pb-2">
         <GroupRivalry
-          meId="Ola"
-          groupName="Rodzinka G"
+          meId="Hania"
+          groupName="Rodzina Nowaków"
           profiles={[
-            demoPlayer('Ola', 666, 1, 92, 2.6, 4, ['braz']),
+            demoPlayer('Hania', 666, 1, 92, 2.6, 4, ['braz']),
             demoPlayer('Kuba', 2400, 5, 88, 3.4, 12, ['zloto', 'srebro']),
             demoPlayer('Aga', 1500, 3, 97, 2.4, 7, []),
             demoPlayer('Tata', 441, 2, 80, 4.1, 3, ['braz']),
@@ -173,7 +173,7 @@ export function HelpShots() {
               actorProfileId: 'k',
               actorName: 'Kuba',
               targetProfileId: demo.id,
-              title: 'Kuba wyprzedza Cię w grupie „Rodzinka G”!',
+              title: 'Kuba wyprzedza Cię w grupie „Rodzina Nowaków”!',
               message: 'Kuba ma 640 XP, a Ty 610 XP. Jedna seria i możesz odzyskać miejsce!',
               readByProfileIds: [],
             },

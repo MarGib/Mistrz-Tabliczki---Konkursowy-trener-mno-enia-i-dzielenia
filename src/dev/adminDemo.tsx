@@ -21,7 +21,7 @@ export const DEMO: AdminDemoData = {
     sessions: 10 + i * 3,
     lastActiveDate: new Date(now - i * DAY * 1.5).toISOString().slice(0, 10),
     updatedAtMs: now - i * DAY * 1.5,
-    groups: i % 2 ? ['3B (G-9GSVX)'] : [],
+    groups: i % 2 ? ['3B (G-PRZYK)'] : [],
     recent: Array.from({ length: 12 - i }, (_, k) => ({
       t: now - Math.floor(rnd() * 14) * DAY - k * 3600_000,
       kind: kinds[Math.floor(rnd() * 4)],

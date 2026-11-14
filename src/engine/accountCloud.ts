@@ -428,7 +428,12 @@ export async function ensureCircleMembership(login: string, circle: CircleMember
   if (!code || !/^[A-Z0-9-]{4,16}$/.test(code) || !/^[a-zA-Z0-9_-]{1,128}$/.test(circle.id)) return null;
   const memberRef = doc(db, 'circles', circle.id, 'members', uid);
   const already = await getDoc(memberRef).catch(() => null);
-  if (already?.exists()) return null;
+  if (already?.exists()) {
+    // Właściciel mógł zmienić kod grupy — pokaż aktualny.
+    const cur = await getDoc(doc(db, 'circles', circle.id)).catch(() => null);
+    const fresh = cur?.exists() ? String(cur.data().joinCode ?? '') : '';
+    return fresh && fresh !== code ? { ...circle, code: fresh } : null;
+  }
   const codeSnap = await getDoc(doc(db, 'circleCodes', code));
   if (codeSnap.exists()) {
     if (String(codeSnap.data().circleId) !== circle.id) return null;
@@ -452,6 +457,18 @@ export async function ensureCircleMembership(login: string, circle: CircleMember
     await setDoc(memberRef, { uid, joinCode: code, joinedAt: serverTimestamp() }).catch(() => {});
     return null;
   }
+}
+
+/** Nowy kod zaproszenia (np. gdy stary trafił w niepowołane ręce). Stary kod przestaje działać; członkowie zostają. */
+export async function rotateCircleCode(login: string, circle: CircleMembership): Promise<string> {
+  const { db } = requireAccount(login);
+  const newCode = `G-${randomCode(5)}`;
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'circles', circle.id), { joinCode: newCode });
+  batch.set(doc(db, 'circleCodes', newCode), { circleId: circle.id, createdAt: serverTimestamp() });
+  batch.delete(doc(db, 'circleCodes', circle.code));
+  await batch.commit();
+  return newCode;
 }
 
 export async function leaveCircle(login: string, circleId: string): Promise<void> {

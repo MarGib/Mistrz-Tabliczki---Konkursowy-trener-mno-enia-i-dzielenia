@@ -98,6 +98,7 @@ export default function App() {
     createGroup,
     joinGroup,
     leaveGroup,
+    changeGroupCode,
     setGroupShare,
   } = useAppStore();
 
@@ -253,6 +254,7 @@ export default function App() {
       onCreateGroup={createGroup}
       onJoinGroup={joinGroup}
       onLeaveGroup={leaveGroup}
+      onChangeCode={changeGroupCode}
       onSetShare={setGroupShare}
       onOpenAccount={() => handleSelectTab('konto')}
     />

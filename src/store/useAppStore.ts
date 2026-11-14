@@ -76,6 +76,7 @@ import {
   getSignedInAccountUid,
   joinCircleByCode,
   leaveCircle,
+  rotateCircleCode,
   publishCircleCards,
   pushAccountProfile,
   pushHistory,
@@ -1163,7 +1164,12 @@ export function useAppStore() {
             profiles: prev.profiles.map((x) =>
               x.id !== profileId
                 ? x
-                : { ...x, circles: (x.circles ?? []).map((cc) => (cc.id === upd.id ? { ...cc, owner: true } : cc)) }
+                : {
+                    ...x,
+                    circles: (x.circles ?? []).map((cc) =>
+                      cc.id === upd.id ? { ...cc, owner: upd.owner || cc.owner, code: upd.code } : cc
+                    ),
+                  }
             ),
           }));
         }
@@ -1971,6 +1977,23 @@ export function useAppStore() {
     [requireSyncedActive, updateProfileCircles]
   );
 
+  const changeGroupCode = useCallback(
+    async (circleId: string): Promise<{ ok: boolean; code?: string; error?: string }> => {
+      const p = requireSyncedActive();
+      if (typeof p === 'string') return { ok: false, error: p };
+      const c = (p.circles ?? []).find((x) => x.id === circleId);
+      if (!c?.owner) return { ok: false, error: 'Kod może zmienić tylko osoba, która założyła grupę.' };
+      try {
+        const code = await rotateCircleCode(profileLogin(p), c);
+        updateProfileCircles(p.id, (list) => list.map((x) => (x.id === circleId ? { ...x, code } : x)));
+        return { ok: true, code };
+      } catch (err) {
+        return { ok: false, error: describeAccountError(err) };
+      }
+    },
+    [requireSyncedActive, updateProfileCircles]
+  );
+
   const setGroupShare = useCallback(
     (circleId: string, share: boolean) => {
       const snap = storeRef.current;
@@ -2094,6 +2117,7 @@ export function useAppStore() {
     createGroup,
     joinGroup,
     leaveGroup,
+    changeGroupCode,
     setGroupShare,
   };
 }
