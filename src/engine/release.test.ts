@@ -89,7 +89,7 @@ test('Graj dalej: nowy gracz dostaje etap 1, po ścieżce — Wyzwanie Mistrza',
   const p = createFreshProfile('Test', 'owl');
   const s = chooseNextStep(p);
   assert.equal(s.kind, 'stage');
-  assert.equal(s.config.stageId, p.unlockedStageIds[0] ?? s.config.stageId);
+  assert.equal(s.config.lessonId, 's1-l1', 'nowy gracz zaczyna od pierwszej kropki');
   const all = [...stageStatus(p).keys()];
   const done = { ...p, completedStageIds: all, unlockedStageIds: all };
   assert.equal(chooseNextStep(done).kind, 'master');
@@ -133,4 +133,93 @@ import { fromMemoryCount } from './seriesInsight';
 test('Z pamięci: poprawne, bez podpowiedzi, poniżej 3 s', () => {
   const a = (ok: boolean, ms: number, hint = false) => ({ isCorrect: ok, timeMs: ms, usedHint: hint });
   assert.equal(fromMemoryCount([a(true, 1000), a(true, 2999), a(true, 3000), a(false, 500), a(true, 800, true)]), 2);
+});
+
+
+import { allModules, lessonStars as starsFor, lessonToConfig, moduleView, nextDot } from './path';
+import { LESSONS, lessonsForStage } from '../data/path';
+import { LEVEL_STAGES } from '../data/curriculum';
+import { seriesPassed, buildSeriesProblems } from './seriesRules';
+import { nearMiss, distinctAnswers } from './games';
+import { pl, toGapProblem, toStoryProblem, createProblem, inTables } from './problemGenerator';
+
+test('Ścieżka: każdy moduł ma 2–4 kropki + test, id unikalne', () => {
+  const ids = LESSONS.map((l) => l.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const st of LEVEL_STAGES) {
+    const n = lessonsForStage(st.id).length;
+    assert.ok(n >= 2 && n <= 4, `${st.id}: ${n} kropek`);
+  }
+});
+
+test('Ścieżka: zaliczony etap = zaliczone kropki (nikt nie traci postępu)', () => {
+  const p = { completedStageIds: ['stage-1', 'stage-2'], unlockedStageIds: ['stage-1'], completedLessonIds: [] };
+  const m1 = moduleView(p, 'stage-1');
+  assert.ok(m1.done && m1.lessons.every((l) => l.state === 'done'));
+  const m3 = moduleView(p, 'stage-3');
+  assert.ok(m3.open && !m3.done);
+  assert.equal(m3.lessons[0].state, 'open');
+  assert.equal(m3.lessons[1].state, 'locked');
+  assert.equal(m3.testState, 'locked');
+  assert.equal(nextDot(p)?.lesson?.id, 's3-l1');
+  // Aga: wszystkie stare etapy zaliczone → Most do Ligi jako nowy moduł
+  const aga = { completedStageIds: LEVEL_STAGES.filter((s) => s.id !== 'stage-bridge').map((s) => s.id), unlockedStageIds: ['stage-1'] };
+  assert.equal(nextDot(aga)?.stageId, 'stage-bridge');
+  assert.ok(allModules(aga).filter((m) => m.done).length === LEVEL_STAGES.length - 1);
+});
+
+test('Ścieżka: po wszystkich kropkach otwiera się test', () => {
+  const p = { completedStageIds: [], unlockedStageIds: ['stage-1'], completedLessonIds: lessonsForStage('stage-1').map((l) => l.id) };
+  assert.equal(moduleView(p, 'stage-1').testState, 'open');
+  assert.equal(nextDot(p)?.lesson, undefined);
+  assert.equal(nextDot(p)?.stageId, 'stage-1');
+});
+
+test('Kropki: konfiguracja serii zgodna z rodzajem', () => {
+  const byKind = (k: string) => LESSONS.find((l) => l.kind === k)!;
+  assert.equal(lessonToConfig(byKind('gap')).gap, true);
+  assert.equal(lessonToConfig(byKind('story')).story, true);
+  assert.equal(lessonToConfig(byKind('truefalse')).game, 'truefalse');
+  assert.equal(lessonToConfig(byKind('pairs')).game, 'pairs');
+  const race = lessonToConfig(byKind('race'));
+  assert.ok(race.timeLimitSec && race.passMinCorrect);
+  assert.ok(lessonToConfig(byKind('learn')).intro);
+});
+
+test('Zaliczenie serii: wyścig, zwykła, wolny trening', () => {
+  const a = (ok: boolean) => ({ isCorrect: ok, timeMs: 2000 });
+  const race = { title: 'r', mode: 'mixed' as const, maxRange: 100, taskCount: 80, timeLimitSec: 60, passMinCorrect: 3, passAccuracyPct: 75 };
+  assert.equal(seriesPassed(race, [a(true), a(true), a(true), a(false)]), true);
+  assert.equal(seriesPassed(race, [a(true), a(true)]), false);
+  assert.equal(seriesPassed({ title: 's', mode: 'mul', maxRange: 100, taskCount: 4, passAccuracyPct: 75 }, [a(true), a(true), a(false), a(false)]), false);
+  assert.equal(seriesPassed({ title: 'f', mode: 'mul', maxRange: 100, taskCount: 4, free: true }, [a(false)]), true);
+  assert.equal(starsFor({ accuracyPct: 100, avgTimeMs: 2000, correctTasks: 10, passedThreshold: true }), 3);
+  assert.equal(starsFor({ accuracyPct: 80, avgTimeMs: 2000, correctTasks: 8, passedThreshold: true }), 1);
+});
+
+test('Zadania: filtr tabliczek, luka, historyjka, odmiana', () => {
+  const series = buildSeriesProblems({ title: 't', mode: 'mul', maxRange: 100, taskCount: 10, tables: [7, 8] }, {});
+  assert.ok(series.every((p) => inTables(p, [7, 8])), 'tylko × 7 i × 8');
+  const g = toGapProblem(createProblem('mul', 6, 7), () => 0.1);
+  assert.equal(g.display, '? × 7 = 42');
+  assert.equal(g.answer, 6);
+  const gd = toGapProblem(createProblem('div', 56, 8), () => 0.1);
+  assert.equal(gd.display, '56 ÷ ? = 7');
+  assert.equal(gd.answer, 8);
+  const st = toStoryProblem(createProblem('mul', 4, 6), () => 0);
+  assert.equal(st.story, 'Każde pudełko ma 6 kredek. Ile kredek jest w 4 pudełkach?');
+  assert.equal(st.answer, 24);
+  assert.equal(pl(2, 'kredkę', 'kredki', 'kredek'), 'kredki');
+  assert.equal(pl(12, 'kredkę', 'kredki', 'kredek'), 'kredek');
+  assert.equal(pl(22, 'kredkę', 'kredki', 'kredek'), 'kredki');
+});
+
+test('Gry: prawie dobry wynik i pary z różnymi wynikami', () => {
+  const p = createProblem('mul', 7, 8);
+  for (let i = 0; i < 20; i++) {
+    const w = nearMiss(p);
+    assert.ok(w !== 56 && w > 0);
+  }
+  const ps = [createProblem('mul', 2, 6), createProblem('mul', 3, 4), createProblem('mul', 4, 5)];
+  assert.deepEqual(distinctAnswers(ps, 3).map((x) => x.answer), [12, 20]);
 });

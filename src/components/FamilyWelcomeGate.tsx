@@ -25,6 +25,7 @@ import type { CloudSyncStatus } from '../store/useAppStore';
 import type { DeviceProfile, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 import { HelpRequestForm } from './HelpRequestForm';
+import { randomLogin } from '../engine/loginIdeas';
 import { PasswordInput } from './PasswordInput';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { readPendingInvite } from './InviteCard';
@@ -483,6 +484,9 @@ export function FamilyWelcomeGate({
                   <p className="text-xs text-[var(--th-text-muted)]">
                     Zaczynasz od 0 XP. Twoja nazwa to też login — zapamiętaj ją razem z hasłem, aby zalogować się na innym urządzeniu.
                   </p>
+                  <p className="mt-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 px-3 py-2 text-xs leading-relaxed" data-testid="privacy-note">
+                    🔒 <strong>Nie podajesz żadnych danych:</strong> bez e-maila, nazwiska, telefonu ani wieku. Wymyśl dowolny login (albo kliknij 🎲), wybierz awatara i ucz się. Zapisujemy tylko wyniki gry, żebyś widział, jak Ci idzie.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -493,16 +497,28 @@ export function FamilyWelcomeGate({
                     >
                       Login (nazwa gracza) *
                     </label>
-                    <input
-                      id="welcome-new-name"
-                      type="text"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      placeholder="np. Kuba, Zosia, Mistrz7"
-                      maxLength={24}
-                      required
-                      className="w-full min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] text-sm font-semibold focus:outline-2 focus:outline-[var(--th-primary)]"
-                    />
+                    <div className="flex gap-1.5">
+                      <input
+                        id="welcome-new-name"
+                        type="text"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="np. Kuba, Zosia, Mistrz7"
+                        maxLength={24}
+                        required
+                        className="flex-1 min-w-0 min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] text-sm font-semibold focus:outline-2 focus:outline-[var(--th-primary)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setNewName(randomLogin())}
+                        title="Wymyśl mi login"
+                        aria-label="Wymyśl mi login"
+                        className="min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface-muted)] text-lg cursor-pointer shrink-0"
+                        data-testid="random-login"
+                      >
+                        🎲
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label

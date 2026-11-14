@@ -18,6 +18,18 @@ export interface ReleaseNote {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: '2026-11-15',
+    date: '15 listopada 2026',
+    title: 'Ścieżka z kropkami, gry i wolny trening',
+    items: [
+      { emoji: '🗺️', text: 'Każdy moduł to kilka krótkich kropek (2–3 minuty): poznaj sposób liczenia, ćwicz, zagraj, a na końcu test modułu.' },
+      { emoji: '🧩', text: 'Nowe gry: Pary, Prawda czy fałsz, Wyścig z czasem, zadania z luką i historyjki.' },
+      { emoji: '🌉', text: 'Nowy moduł „Most do Ligi” i łagodniejsze progi w Lidze Mistrzów.' },
+      { emoji: '🎲', text: 'Wolny trening: sam wybierasz, co, ile minut i które tabliczki — albo „Tylko moje trudne”.' },
+      { emoji: '🔒', text: 'Nie podajesz żadnych danych — login możesz wylosować przyciskiem 🎲.' },
+    ],
+  },
+  {
     id: '2026-11-14d',
     date: '14 listopada 2026',
     title: 'Wygodniej na tablecie',

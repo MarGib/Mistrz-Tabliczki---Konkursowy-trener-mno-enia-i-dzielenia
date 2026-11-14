@@ -347,7 +347,15 @@ export function mergeSingleProfile(
     login: local.login ?? merged.login,
     passwordHash: local.passwordHash ?? merged.passwordHash,
     masterLevel: Math.max(local.masterLevel ?? 0, cloud.masterLevel ?? 0) || undefined,
+    completedLessonIds: Array.from(new Set([...(local.completedLessonIds ?? []), ...(cloud.completedLessonIds ?? [])])),
+    lessonStars: mergeStars(local.lessonStars, cloud.lessonStars),
   };
+}
+
+function mergeStars(a?: Record<string, number>, b?: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = { ...(a ?? {}) };
+  for (const [k, v] of Object.entries(b ?? {})) out[k] = Math.max(out[k] ?? 0, v);
+  return out;
 }
 
 function mergeSingleProfileInner(

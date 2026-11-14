@@ -19,8 +19,10 @@ async def main():
             for _ in range(3):
                 sk = pg.get_by_role('button', name='Pomiń')
                 if await sk.count(): await sk.first.click(); await pg.wait_for_timeout(300)
-            await pg.get_by_role('button', name='Rozpocznij serię').first.click()
+            await pg.locator('[data-testid=next-step]').click()
             await pg.wait_for_timeout(600)
+            if await pg.locator('[data-testid=lesson-intro-start]').count():
+                await pg.locator('[data-testid=lesson-intro-start]').click(); await pg.wait_for_timeout(300)
             for i in range(10):
                 txt = await pg.locator('body').inner_text()
                 import re
@@ -33,12 +35,11 @@ async def main():
             await pg.wait_for_timeout(800)
             await pg.screenshot(path=f'/tmp/smoke_{w}_end.png')
             done = await pg.locator('body').inner_text()
-            print(w, 'po serii:', 'OK' if ('Seria ukończona' in done or 'Wynik' in done or 'poprawn' in done.lower()) else done[:200].replace('\n',' | '))
-            close = pg.get_by_label('Zakończ serię i wróć')
-            if await close.count(): await close.first.click()
-            else:
-                back = pg.get_by_role('button', name='Wróć')
-                if await back.count(): await back.first.click()
+            print(w, 'po serii:', 'OK' if ('zaliczona' in done or 'Wynik' in done or 'poprawn' in done.lower()) else done[:200].replace('\n',' | '))
+            for nm in ['Dalej po ścieżce', 'Wróć do panelu']:
+                bt = pg.get_by_role('button', name=nm)
+                if await bt.count():
+                    await bt.first.click(); break
             await pg.wait_for_timeout(700)
             for tab in ['Turnieje','Statystyki','Szablony','Konto','Trening']:
                 t = pg.get_by_role('button', name=tab).first

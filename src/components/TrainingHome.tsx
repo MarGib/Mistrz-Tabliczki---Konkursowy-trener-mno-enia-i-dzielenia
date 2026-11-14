@@ -24,6 +24,7 @@ import heroBannerImg from '../assets/images/hero_contest_banner_1794652992683.jp
 import { LEVEL_STAGES } from '../data/curriculum';
 import { MasterChallengeCard } from './MasterChallengeCard';
 import { StagePath } from './StagePath';
+import { FreeTrainingPanel } from './FreeTrainingPanel';
 import { NextStepCard } from './NextStepCard';
 import { DailyGoalBar } from './DailyGoalBar';
 import { dailyGoalState } from '../engine/dailyGoal';
@@ -297,84 +298,12 @@ export function TrainingHome({
               </p>
             </div>
 
-            {/* Operation & Series Length Controls */}
-            <div className="mt-4 space-y-3.5">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs sm:text-sm font-bold text-[var(--th-text)]">
-                    Wybierz tryb ćwiczeń
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onOpenSettings}
-                    className="text-xs font-semibold text-[var(--th-primary)] hover:underline cursor-pointer"
-                  >
-                    Zakres: do {profile.settings.maxRange} (Zmień)
-                  </button>
-                </div>
-                <div
-                  className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-[var(--th-surface-muted)] rounded-2xl border border-[var(--th-border)]"
-                  role="group"
-                  aria-label="Tryb działań"
-                >
-                  {MODE_OPTIONS.map((opt) => {
-                    const active = selectedMode === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setSelectedMode(opt.id)}
-                        className={`min-h-[42px] px-1.5 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
-                          active
-                            ? 'bg-[var(--th-surface)] text-[var(--th-text)] shadow-sm border border-[var(--th-border)]'
-                            : 'text-[var(--th-text-muted)] hover:text-[var(--th-text)]'
-                        }`}
-                      >
-                        <span className="font-mono text-[var(--th-primary)]">{opt.symbol}</span>
-                        <span>{opt.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs sm:text-sm font-bold text-[var(--th-text)]">
-                  Długość serii
-                </span>
-                <div className="flex items-center gap-1.5 p-1 bg-[var(--th-surface-muted)] rounded-xl border border-[var(--th-border)]">
-                  {[8, 10, 15, 20].map((len) => (
-                    <button
-                      key={len}
-                      type="button"
-                      onClick={() => setSeriesLength(len)}
-                      className={`min-w-[40px] sm:min-w-[44px] min-h-[36px] px-2 rounded-lg text-xs sm:text-sm font-bold tabular-nums transition-colors cursor-pointer ${
-                        seriesLength === len
-                          ? 'bg-[var(--th-surface)] text-[var(--th-text)] shadow-sm'
-                          : 'text-[var(--th-text-muted)] hover:text-[var(--th-text)]'
-                      }`}
-                    >
-                      {len}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <FreeTrainingPanel profile={profile} onStart={onStartSeries} />
           </div>
 
-          {/* Primary Launch Actions */}
-          <div className="mt-4 sm:mt-6 pt-4 border-t border-[var(--th-border)] flex flex-col sm:flex-row gap-2.5 sm:gap-3">
-            <button
-                data-tour="quickstart"
-              type="button"
-              onClick={handleQuickCustomStart}
-              className="flex-1 min-h-[48px] sm:min-h-[52px] px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-display text-base sm:text-lg font-bold border-b-4 border-[var(--th-primary-dark)] active:border-b-2 active:translate-y-[2px] transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Play className="w-5 h-5 fill-current" aria-hidden="true" />
-              <span>Rozpocznij serię ({seriesLength} zadań)</span>
-            </button>
-
-            {diagnostics.recommendedFocusIds.length > 0 && (
+          {/* Powtórka SuperMemo (gdy są działania do powtórki) */}
+          {diagnostics.recommendedFocusIds.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-[var(--th-border)] flex flex-col sm:flex-row gap-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={() => handleStartRecommendedReview()}
@@ -389,8 +318,8 @@ export function TrainingHome({
                   )
                 </span>
               </button>
-            )}
           </div>
+          )}
         </div>
 
         {/* Right: Visual Contest Banner */}

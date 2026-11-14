@@ -50,6 +50,9 @@ import { VisualHintCard } from './VisualHintCard';
 import { setGameActive } from '../autoUpdate';
 import { fromMemoryCount, seriesInsight } from '../engine/seriesInsight';
 import { personalRecord } from '../engine/records';
+import { buildSeriesProblems, seriesPassed } from '../engine/seriesRules';
+import { LessonIntroCard } from './LessonIntroCard';
+import { lessonStars } from '../engine/path';
 
 interface ExerciseArenaProps {
   config: ActiveSeriesConfig;
@@ -104,15 +107,11 @@ export function ExerciseArena({
   onRestartWithFocus,
   pastSessions,
 }: ExerciseArenaProps) {
-  const [problems, setProblems] = useState<MathProblem[]>(() =>
-    selectAdaptiveSeries({
-      mode: config.mode,
-      maxRange: config.maxRange,
-      count: config.taskCount,
-      memories,
-      focusFactIds: config.focusFactIds,
-    })
-  );
+  const [problems, setProblems] = useState<MathProblem[]>(() => buildSeriesProblems(config, memories));
+  // Karta „Poznaj” przed startem serii (kropki ze ścieżki).
+  const [introOpen, setIntroOpen] = useState(Boolean(config.intro));
+  // Seria na czas (wyścig, wolny trening na minuty): pozostały czas w sekundach.
+  const [timeLeftSec, setTimeLeftSec] = useState<number | null>(config.timeLimitSec ?? null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [inputValue, setInputValue] = useState('');
@@ -168,6 +167,24 @@ export function ExerciseArena({
     return 10;
   }, [config.targetAvgTimeSec]);
 
+  // Seria na czas: odliczanie i zakończenie po upływie limitu (także w trakcie oczekiwania na „Dalej”).
+  const attemptsRef = useRef<TaskAttempt[]>([]);
+  attemptsRef.current = attempts;
+  const finishRef = useRef<(a: TaskAttempt[]) => void>(() => {});
+  useEffect(() => {
+    if (!config.timeLimitSec || isFinished || introOpen) return;
+    const limitMs = config.timeLimitSec * 1000;
+    const t = window.setInterval(() => {
+      const left = Math.max(0, Math.ceil((limitMs - (Date.now() - seriesStartRef.current)) / 1000));
+      setTimeLeftSec(left);
+      if (left <= 0) {
+        window.clearInterval(t);
+        finishRef.current(attemptsRef.current);
+      }
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [config.timeLimitSec, isFinished, introOpen]);
+
   // Cichy release: w trakcie serii zadań nie podmieniamy wersji aplikacji.
   useEffect(() => {
     setGameActive(!isFinished);
@@ -188,7 +205,7 @@ export function ExerciseArena({
 
   // Live task timer + automatic smart visual hint + clock tick when time runs low
   useEffect(() => {
-    if (isFinished || feedback !== null) return;
+    if (isFinished || feedback !== null || introOpen) return;
 
     const timer = window.setInterval(() => {
       const elapsed = Date.now() - taskStartRef.current;
@@ -229,6 +246,7 @@ export function ExerciseArena({
     settings.soundEnabled,
     showHint,
     hintDismissed,
+    introOpen,
   ]);
 
   const visualHint = useMemo(() => {
@@ -270,28 +288,22 @@ export function ExerciseArena({
 
   const advanceToNext = useCallback(
     (nextAttempts: TaskAttempt[]) => {
-      if (currentIndex + 1 >= problems.length) {
+      const timeUp =
+        config.timeLimitSec !== undefined && Date.now() - seriesStartRef.current >= config.timeLimitSec * 1000 - 50;
+      if (currentIndex + 1 >= problems.length || timeUp) {
         setIsFinished(true);
         stopBackgroundMusic();
         playTone('finish', settings.soundEnabled);
         setBurstKey((k) => k + 1);
         setBurstLabel('Seria ukończona!');
 
-        if (!recordedRef.current) {
+        if (!recordedRef.current && nextAttempts.length > 0) {
           recordedRef.current = true;
           const totalTimeMs = nextAttempts.reduce((acc, a) => acc + a.timeMs, 0);
           const correctTasks = nextAttempts.filter((a) => a.isCorrect).length;
-          const thresholdPct = config.passAccuracyPct ?? 70;
-          const stagePass = checkStagePass(correctTasks, nextAttempts.length, thresholdPct);
-          const accuracyPct = stagePass.accuracyPct;
-          const passed = config.masterLevel
-            ? isMasterChallengePassed(
-                accuracyPct,
-                nextAttempts.length > 0 ? totalTimeMs / nextAttempts.length : 0,
-                thresholdPct,
-                config.targetAvgTimeSec ?? 99
-              )
-            : stagePass.passed;
+          const accuracyPct =
+            nextAttempts.length > 0 ? Math.round((correctTasks / nextAttempts.length) * 100) : 0;
+          const passed = seriesPassed(config, nextAttempts);
           const earned = nextAttempts.reduce((acc, a) => acc + a.pointsEarned, 0);
 
           const session: SessionRecord = {
@@ -301,6 +313,8 @@ export function ExerciseArena({
             seriesTitle: config.title,
             stageId: config.stageId,
             tournamentId: config.tournamentId,
+            lessonId: config.lessonId,
+            free: config.free,
             maxRange: config.maxRange,
             masterLevel: config.masterLevel,
             targetAvgTimeSec: config.targetAvgTimeSec,
@@ -343,6 +357,8 @@ export function ExerciseArena({
       settings.soundEnabled,
     ]
   );
+
+  finishRef.current = advanceToNext;
 
   const handleSubmit = useCallback(() => {
     if (!currentProblem || inputValue.length === 0 || feedback !== null || isFinished) {
@@ -436,14 +452,9 @@ export function ExerciseArena({
   }, [advanceToNext, attempts, feedback, isFinished]);
 
   const handleRestartSeries = () => {
-    const fresh = selectAdaptiveSeries({
-      mode: config.mode,
-      maxRange: config.maxRange,
-      count: config.taskCount,
-      memories,
-      focusFactIds: config.focusFactIds,
-    });
+    const fresh = buildSeriesProblems(config, memories);
     setProblems(fresh);
+    setTimeLeftSec(config.timeLimitSec ?? null);
     setCurrentIndex(0);
     setInputValue('');
     setAttempts([]);
@@ -469,11 +480,7 @@ export function ExerciseArena({
     const correctCount = attempts.filter((a) => a.isCorrect).length;
     const accuracyPct =
       attempts.length > 0 ? Math.round((correctCount / attempts.length) * 100) : 0;
-    const passed = config.masterLevel
-      ? isMasterChallengePassed(accuracyPct, avgTimeMs, config.passAccuracyPct ?? 85, config.targetAvgTimeSec ?? 99)
-      : config.passAccuracyPct
-      ? accuracyPct >= config.passAccuracyPct
-      : true;
+    const passed = seriesPassed(config, attempts);
 
     const sortedByTime = [...attempts].sort((a, b) => b.timeMs - a.timeMs);
     const hardOrSlowIds = Array.from(
@@ -551,11 +558,35 @@ export function ExerciseArena({
                 Podsumowanie serii · {config.title}
               </p>
               <h1 className="mt-1 font-display text-2xl sm:text-3xl font-bold text-[var(--th-text)]">
-                {passed
-                  ? 'Świetna robota! Seria zaliczona'
-                  : 'Dobry trening! Jeszcze chwila do progu'}
+                {config.free
+                  ? 'Trening zapisany!'
+                  : config.lessonId
+                    ? passed
+                      ? 'Kropka zaliczona!'
+                      : 'Prawie! Spróbuj jeszcze raz'
+                    : passed
+                      ? 'Świetna robota! Seria zaliczona'
+                      : 'Dobry trening! Jeszcze chwila do progu'}
               </h1>
-              {config.passAccuracyPct && (
+              {config.lessonId && passed && (() => {
+                const st = lessonStars(
+                  { accuracyPct, avgTimeMs, correctTasks: correctCount, passedThreshold: passed },
+                  config
+                );
+                return (
+                  <p className="mt-1 text-3xl tracking-widest text-amber-500" data-testid="stars" aria-label={`${st} z 3 gwiazdek`}>
+                    {'★'.repeat(st)}
+                    <span className="text-[var(--th-border)]">{'★'.repeat(3 - st)}</span>
+                  </p>
+                );
+              })()}
+              {config.timeLimitSec && config.passMinCorrect && (
+                <p className="mt-1 text-sm text-[var(--th-text-muted)]">
+                  Cel: <strong className="text-[var(--th-text)]">{config.passMinCorrect} poprawnych</strong> · Twój wynik:{' '}
+                  <strong className="tabular-nums text-[var(--th-text)]">{correctCount}</strong>
+                </p>
+              )}
+              {config.passAccuracyPct && !config.passMinCorrect && (
                 <p className="mt-1 text-sm text-[var(--th-text-muted)]">
                   Próg przejścia: <strong className="tabular-nums text-[var(--th-text)]">{config.passAccuracyPct}%</strong>{' '}
                   · Twój wynik: <strong className="tabular-nums text-[var(--th-text)]">{accuracyPct}%</strong>
@@ -765,7 +796,7 @@ export function ExerciseArena({
               onClick={onExit}
               className="px-5 py-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-surface-muted)] text-[var(--th-text)] font-semibold hover:opacity-90 transition-colors cursor-pointer"
             >
-              Wróć do panelu
+              {config.lessonId && passed ? "Dalej po ścieżce" : "Wróć do panelu"}
             </button>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -800,7 +831,9 @@ export function ExerciseArena({
     );
   }
 
-  const progressPct = Math.round(((currentIndex + (feedback ? 1 : 0)) / problems.length) * 100);
+  const progressPct = config.timeLimitSec
+    ? Math.round(((config.timeLimitSec - (timeLeftSec ?? config.timeLimitSec)) / config.timeLimitSec) * 100)
+    : Math.round(((currentIndex + (feedback ? 1 : 0)) / problems.length) * 100);
   const elapsedSec = elapsedTaskMs / 1000;
   const remainingPaceSec = Math.max(0, paceTargetSec - elapsedSec);
   const pacePct = Math.max(0, Math.min(100, (remainingPaceSec / paceTargetSec) * 100));
@@ -831,7 +864,13 @@ export function ExerciseArena({
           <div className="flex items-center justify-between text-xs font-semibold text-[var(--th-text-muted)] mb-1.5 tabular-nums gap-2">
             <span className="truncate">{config.title}</span>
             <span className="shrink-0">
-              Zadanie {currentIndex + 1} z {problems.length}
+              {config.timeLimitSec ? (
+                <span className="font-bold text-[var(--th-text)]" data-testid="time-left">
+                  ⏱ {Math.floor((timeLeftSec ?? 0) / 60)}:{String((timeLeftSec ?? 0) % 60).padStart(2, '0')} · {attempts.filter((a) => a.isCorrect).length} poprawnych
+                </span>
+              ) : (
+                <>Zadanie {currentIndex + 1} z {problems.length}</>
+              )}
             </span>
           </div>
           <div className="h-3 bg-[var(--th-border)] rounded-full overflow-hidden">
@@ -895,7 +934,18 @@ export function ExerciseArena({
         </div>
       </div>
 
-      {/* Main Responsive Stage: 2 Columns on Desktop/Landscape Tablet, Stacked on Phone */}
+      {introOpen && config.intro ? (
+        <LessonIntroCard
+          intro={config.intro}
+          onStart={() => {
+            setIntroOpen(false);
+            taskStartRef.current = Date.now();
+            seriesStartRef.current = Date.now();
+            ensureAudioStarted();
+          }}
+        />
+      ) : (
+      /* Main Responsive Stage: 2 Columns on Desktop/Landscape Tablet, Stacked on Phone */
       <div className="arena-stage grid grid-cols-1 lg:grid-cols-12 gap-4 [@media(max-height:720px)]:gap-2.5 sm:gap-6 items-start">
         {/* Left / Top Stage: Equation Card + Visual Hint */}
         <div className="arena-left lg:col-span-7 flex flex-col gap-3 sm:gap-4">
@@ -970,37 +1020,60 @@ export function ExerciseArena({
               </div>
             )}
 
-            {/* Big Equation Display */}
-            <div className="arena-eq-row flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-3 pb-1 sm:pt-8 sm:pb-6">
-              <span
-                className="arena-eq font-display text-4xl sm:text-6xl font-extrabold tracking-tight text-[var(--th-text)] tabular-nums"
-                data-testid="equation-text"
-              >
-                {currentProblem?.display}
-              </span>
-              <span className="arena-eq font-display text-4xl sm:text-6xl font-bold text-[var(--th-text-muted)]">
-                =
-              </span>
-              <div
-                aria-label="Wpisana odpowiedź"
-                data-testid="answer-display"
-                className={`arena-answer min-w-[92px] sm:min-w-[124px] h-16 sm:h-20 px-4 rounded-2xl border-2 flex items-center justify-center font-display text-4xl sm:text-5xl font-extrabold tabular-nums transition-colors ${
-                  feedback
-                    ? feedback.isCorrect
-                      ? isDark
-                        ? 'bg-emerald-950/60 border-emerald-400 text-emerald-300'
-                        : 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                      : isDark
-                      ? 'bg-red-950/60 border-red-400 text-red-300'
-                      : 'bg-red-50 border-red-400 text-red-700'
-                    : inputValue.length > 0
-                    ? 'bg-[var(--th-soft-tint)] border-[var(--th-primary)] text-[var(--th-text)]'
-                    : 'bg-[var(--th-surface-muted)] border-[var(--th-border)] text-[var(--th-text-muted)]'
-                }`}
-              >
-                {inputValue.length > 0 ? inputValue : '?'}
-              </div>
-            </div>
+            {/* Big Equation Display — zwykłe działanie, luka („? × 6 = 42”) albo historyjka */}
+            {(() => {
+              const eqCls = 'arena-eq font-display text-4xl sm:text-6xl font-extrabold tracking-tight text-[var(--th-text)] tabular-nums';
+              const answerBox = (
+          <div
+            aria-label="Wpisana odpowiedź"
+            data-testid="answer-display"
+            className={`arena-answer min-w-[92px] sm:min-w-[124px] h-16 sm:h-20 px-4 rounded-2xl border-2 flex items-center justify-center font-display text-4xl sm:text-5xl font-extrabold tabular-nums transition-colors ${
+              feedback
+                ? feedback.isCorrect
+                  ? isDark
+                    ? 'bg-emerald-950/60 border-emerald-400 text-emerald-300'
+                    : 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                  : isDark
+                  ? 'bg-red-950/60 border-red-400 text-red-300'
+                  : 'bg-red-50 border-red-400 text-red-700'
+                : inputValue.length > 0
+                ? 'bg-[var(--th-soft-tint)] border-[var(--th-primary)] text-[var(--th-text)]'
+                : 'bg-[var(--th-surface-muted)] border-[var(--th-border)] text-[var(--th-text-muted)]'
+            }`}
+          >
+            {inputValue.length > 0 ? inputValue : '?'}
+          </div>
+              );
+              if (currentProblem?.story) {
+                return (
+                  <div className="arena-eq-row flex flex-col items-center justify-center gap-4 pt-3 pb-1 sm:pt-6 sm:pb-4">
+                    <p className="text-lg sm:text-2xl font-semibold text-center leading-snug max-w-xl text-[var(--th-text)]" data-testid="equation-text">
+                      📖 {currentProblem.story}
+                    </p>
+                    {answerBox}
+                  </div>
+                );
+              }
+              if (currentProblem?.gap) {
+                const [left, right] = currentProblem.display.split('?');
+                return (
+                  <div className="arena-eq-row flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-3 pb-1 sm:pt-8 sm:pb-6" data-testid="equation-text">
+                    {left.trim() && <span className={eqCls}>{left.trim()}</span>}
+                    {answerBox}
+                    {right.trim() && <span className={eqCls}>{right.trim()}</span>}
+                  </div>
+                );
+              }
+              return (
+                <div className="arena-eq-row flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-3 pb-1 sm:pt-8 sm:pb-6">
+                  <span className={eqCls} data-testid="equation-text">
+                    {currentProblem?.display}
+                  </span>
+                  <span className="arena-eq font-display text-4xl sm:text-6xl font-bold text-[var(--th-text-muted)]">=</span>
+                  {answerBox}
+                </div>
+              );
+            })()}
 
             {/* Stały slot pod działaniem: przycisk podpowiedzi / podpowiedź / informacja zwrotna.
                 Ma stałą wysokość, więc nic nie przesuwa działania ani klawiatury. */}
@@ -1115,6 +1188,7 @@ export function ExerciseArena({
           />
         </div>
       </div>
+      )}
     </div>
   );
 }

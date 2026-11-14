@@ -3,7 +3,7 @@ import type { NextStep } from '../engine/nextStep';
 import type { ActiveSeriesConfig } from '../types/math';
 
 const ICON = { review: Flame, stage: MapIcon, master: InfinityIcon } as const;
-const KIND_LABEL = { review: 'Najpierw utrwalamy', stage: 'Następny etap', master: 'Gramy dalej' } as const;
+const KIND_LABEL = { review: 'Najpierw utrwalamy', stage: 'Następna kropka', master: 'Gramy dalej' } as const;
 
 /** Jeden duży przycisk „Graj dalej” — aplikacja sama wybiera najlepszy następny krok. */
 export function NextStepCard({ step, onStart }: { step: NextStep; onStart: (c: ActiveSeriesConfig) => void }) {

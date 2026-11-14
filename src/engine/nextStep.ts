@@ -1,13 +1,15 @@
 /**
  * „Graj dalej” — jeden przycisk, który sam wybiera najlepszy następny krok:
  *  1. powtórki zaplanowane na dziś (gdy są co najmniej 3) — utrwalenie ma pierwszeństwo,
- *  2. następny otwarty etap Ścieżki Mistrza,
+ *  2. następna kropka na ścieżce (albo test modułu),
  *  3. Wyzwanie Mistrza (gdy ścieżka ukończona).
  */
 import { LEVEL_STAGES } from '../data/curriculum';
 import type { ActiveSeriesConfig, LevelStage, UserProfile } from '../types/math';
 import { buildMasterChallenge } from './masterChallenge';
 import { buildReviewCalendar, formatFactPrompt } from './reviewCalendar';
+import { KIND_META } from '../data/path';
+import { lessonToConfig, nextDot } from './path';
 
 export type StageState = 'done' | 'open' | 'locked';
 
@@ -31,6 +33,7 @@ export function stageToConfig(stage: LevelStage): ActiveSeriesConfig {
     stageId: stage.id,
     passAccuracyPct: stage.passAccuracyPct,
     targetAvgTimeSec: stage.targetAvgTimeSec,
+    tables: stage.tables,
   };
 }
 
@@ -65,14 +68,23 @@ export function chooseNextStep(profile: UserProfile, now = Date.now()): NextStep
       },
     };
   }
-  const status = stageStatus(profile);
-  const next = LEVEL_STAGES.find((s) => status.get(s.id) === 'open');
-  if (next) {
+  const dot = nextDot(profile);
+  if (dot) {
+    const stage = LEVEL_STAGES.find((s) => s.id === dot.stageId)!;
+    if (dot.lesson) {
+      const meta = KIND_META[dot.lesson.kind];
+      return {
+        kind: 'stage',
+        label: `${meta.emoji} ${dot.lesson.title}`,
+        detail: `${stage.title} · ${meta.label}`,
+        config: lessonToConfig(dot.lesson, profile.memories),
+      };
+    }
     return {
       kind: 'stage',
-      label: `Etap ${next.order}: ${next.title}`,
-      detail: `${next.taskCount} zadań · zalicza ${next.passAccuracyPct}% poprawnych`,
-      config: stageToConfig(next),
+      label: `🏆 Test modułu: ${stage.title}`,
+      detail: `${stage.taskCount} zadań · zalicza ${stage.passAccuracyPct}% poprawnych`,
+      config: stageToConfig(stage),
     };
   }
   const ch = buildMasterChallenge(profile);

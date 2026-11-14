@@ -47,6 +47,7 @@ import { InstallAppButton } from './InstallBanner';
 import { isAdminDevice } from '../engine/adminCloud';
 import { AdminQuickPeek } from './AdminQuickPeek';
 import { WhatsNewDialog } from './WhatsNewDialog';
+import { HowWePlayDialog } from './HowWePlayDialog';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { AvatarStudio } from './AvatarStudio';
 
@@ -141,6 +142,7 @@ export function ProfileSettingsView({
   onReopenProfilePicker,
 }: ProfileSettingsViewProps) {
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [newName, setNewName] = useState('');
   const [newSchool, setNewSchool] = useState('');
   const [newClass, setNewClass] = useState('');
@@ -380,6 +382,14 @@ export function ProfileSettingsView({
             ✨ Co nowego w aplikacji
           </button>
           {showWhatsNew && <WhatsNewDialog enabled isNewPlayer={false} forceOpen onClose={() => setShowWhatsNew(false)} />}
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            className="w-full min-h-[40px] rounded-xl border border-[var(--th-border)] text-sm font-bold text-[var(--th-text)] hover:border-[var(--th-primary)] cursor-pointer inline-flex items-center justify-center gap-2"
+          >
+            🗺️ Jak gramy (ścieżka z kropkami)
+          </button>
+          {showRules && <HowWePlayDialog profileId={activeProfile.id} enabled forceOpen onClose={() => setShowRules(false)} />}
           {isAdminDevice() && <AdminQuickPeek />}
           {!activeProfile.cloudUid && (
             <p className="text-[11px] text-[var(--th-text-muted)] -mt-2">

@@ -101,12 +101,20 @@ export function factFamily(id: string): string[] {
   return Array.from(new Set([`mul:${a}x${b}`, `mul:${b}x${a}`, `div:${p}/${a}`, `div:${p}/${b}`])).filter((x) => x !== id);
 }
 
+/** Czy działanie należy do wybranych tabliczek (mnożenie: któryś czynnik; dzielenie: dzielnik albo wynik). */
+export function inTables(p: Pick<MathProblem, 'op' | 'a' | 'b' | 'answer'>, tables: number[]): boolean {
+  if (p.op === 'mul') return tables.includes(p.a) || tables.includes(p.b);
+  return tables.includes(p.b) || tables.includes(p.answer);
+}
+
 export function selectAdaptiveSeries(options: {
   mode: OperationMode;
   maxRange: number;
   count: number;
   memories: Record<string, FactMemory>;
   focusFactIds?: string[];
+  /** Tylko wybrane tabliczki (np. [7, 8]). */
+  tables?: number[];
   now?: number;
   rng?: () => number;
 }): MathProblem[] {
@@ -116,11 +124,14 @@ export function selectAdaptiveSeries(options: {
     count,
     memories,
     focusFactIds,
+    tables,
     now = Date.now(),
     rng = Math.random,
   } = options;
 
-  const catalog = buildFactCatalog(mode, maxRange);
+  const full = buildFactCatalog(mode, maxRange);
+  const filtered = tables && tables.length > 0 ? full.filter((p) => inTables(p, tables)) : full;
+  const catalog = filtered.length > 0 ? filtered : full;
   if (catalog.length === 0) return [];
 
   const catalogMap = new Map(catalog.map((p) => [p.id, p]));
@@ -372,4 +383,53 @@ export function generateVisualHint(problem: MathProblem): VisualHintData {
     division: buildDivisionLadder(dividend, divisor, quotient),
     shortTip: `Licz co ${divisor}, aż dojdziesz do ${dividend}`,
   };
+}
+
+/* ───────────── Luka i historyjki ───────────── */
+
+/** Odmiana rzeczownika przy liczbie: 1 kredka, 2 kredki, 5 kredek. */
+export function pl(n: number, one: string, few: string, many: string): string {
+  if (n === 1) return one;
+  const d = n % 10;
+  const dd = n % 100;
+  return d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? few : many;
+}
+
+/** Zadanie z luką: „? × 6 = 42” albo „56 ÷ ? = 8”. Ten sam fakt (id), inna niewiadoma. */
+export function toGapProblem(p: MathProblem, rng: () => number = Math.random): MathProblem {
+  if (p.op === 'mul') {
+    const c = p.a * p.b;
+    return rng() < 0.5
+      ? { ...p, gap: true, display: `? × ${p.b} = ${c}`, answer: p.a }
+      : { ...p, gap: true, display: `${p.a} × ? = ${c}`, answer: p.b };
+  }
+  const q = p.answer;
+  return rng() < 0.5
+    ? { ...p, gap: true, display: `${p.a} ÷ ? = ${q}`, answer: p.b }
+    : { ...p, gap: true, display: `? ÷ ${p.b} = ${q}`, answer: p.a };
+}
+
+const MUL_STORIES: ((a: number, b: number) => string)[] = [
+  (a, b) => `Każde pudełko ma ${b} ${pl(b, 'kredkę', 'kredki', 'kredek')}. Ile kredek jest w ${a} ${pl(a, 'pudełku', 'pudełkach', 'pudełkach')}?`,
+  (a, b) => `Na każdej półce stoi ${b} ${pl(b, 'książka', 'książki', 'książek')}. Ile książek stoi na ${a} ${pl(a, 'półce', 'półkach', 'półkach')}?`,
+  (a, b) => `W każdym z ${a} wagoników jedzie ${b} ${pl(b, 'dziecko', 'dzieci', 'dzieci')}. Ile dzieci jedzie pociągiem?`,
+  (a, b) => `Zosia układa ${a} ${pl(a, 'rząd', 'rzędy', 'rzędów')} klocków, po ${b} w każdym rzędzie. Ile klocków ułożyła?`,
+  (a, b) => `Bilet do kina kosztuje ${b} zł. Ile zapłaci rodzina za ${a} ${pl(a, 'bilet', 'bilety', 'biletów')}?`,
+];
+
+const DIV_STORIES: ((p: number, b: number) => string)[] = [
+  (p, b) => `Mamy ${p} ${pl(p, 'cukierka', 'cukierki', 'cukierków')} i dzielimy je po równo między ${b} ${pl(b, 'dziecko', 'dzieci', 'dzieci')}. Ile cukierków dostanie każde dziecko?`,
+  (p, b) => `${p} ${pl(p, 'jabłko', 'jabłka', 'jabłek')} pakujemy do koszyków, po ${b} do każdego. Ile koszyków potrzeba?`,
+  (p, b) => `W klasie jest ${p} ${pl(p, 'krzesło', 'krzesła', 'krzeseł')} ustawionych w ${b} ${pl(b, 'rzędzie', 'rzędach', 'rzędach')} po równo. Ile krzeseł stoi w jednym rzędzie?`,
+  (p, b) => `Tata przejechał ${p} km w ${b} ${pl(b, 'dzień', 'dni', 'dni')}, każdego dnia tyle samo. Ile kilometrów przejeżdżał dziennie?`,
+];
+
+/** Historyjka (zadanie tekstowe) dla działania — odpowiedź taka sama jak w działaniu. */
+export function toStoryProblem(p: MathProblem, rng: () => number = Math.random): MathProblem {
+  if (p.op === 'mul') {
+    const t = MUL_STORIES[Math.floor(rng() * MUL_STORIES.length)];
+    return { ...p, story: t(p.a, p.b) };
+  }
+  const t = DIV_STORIES[Math.floor(rng() * DIV_STORIES.length)];
+  return { ...p, story: t(p.a, p.b) };
 }

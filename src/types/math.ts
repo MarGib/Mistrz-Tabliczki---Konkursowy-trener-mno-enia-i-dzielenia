@@ -27,6 +27,10 @@ export interface MathProblem {
   b: number;
   answer: number;
   display: string;
+  /** Zadanie z luką: w `display` znak „?” oznacza miejsce na odpowiedź (np. „? × 6 = 42”). */
+  gap?: boolean;
+  /** Historyjka: zadanie tekstowe zamiast działania. */
+  story?: string;
 }
 
 export interface FactMemory {
@@ -77,6 +81,10 @@ export interface SessionRecord {
   pointsEarned: number;
   passedThreshold: boolean;
   thresholdPct?: number;
+  /** Kropka na ścieżce modułu. */
+  lessonId?: string;
+  /** Wolny trening. */
+  free?: boolean;
   attempts: TaskAttempt[];
 }
 
@@ -92,6 +100,8 @@ export interface LevelStage {
   targetAvgTimeSec: number;
   rewardXp: number;
   badgeName: string;
+  /** Tabliczki sprawdzane w teście modułu (np. [2, 10]); brak = wszystkie z zakresu. */
+  tables?: number[];
 }
 
 export interface TournamentDef {
@@ -255,6 +265,10 @@ export interface UserProfile {
   leftCircleIds?: string[];
   /** uid konta Firebase (login + hasło) — obecny, gdy konto jest zsynchronizowane w chmurze. */
   cloudUid?: string;
+  /** Zaliczone kropki na ścieżkach modułów. */
+  completedLessonIds?: string[];
+  /** Gwiazdki za kropki (1–3). */
+  lessonStars?: Record<string, number>;
 }
 
 export interface CircleMembership {
@@ -328,4 +342,30 @@ export interface ActiveSeriesConfig {
   targetAvgTimeSec?: number;
   /** Wyzwanie Mistrza: numer poziomu (seria zaliczona = awans). */
   masterLevel?: number;
+  /** Tylko wybrane tabliczki (np. [7, 8]). */
+  tables?: number[];
+  /** Zadania z luką („? × 6 = 42”). */
+  gap?: boolean;
+  /** Historyjki (zadania tekstowe). */
+  story?: boolean;
+  /** Seria na czas: kończy się po tylu sekundach (wyścig, wolny trening na minuty). */
+  timeLimitSec?: number;
+  /** Zaliczenie wyścigu: co najmniej tyle poprawnych odpowiedzi. */
+  passMinCorrect?: number;
+  /** Kropka na ścieżce modułu. */
+  lessonId?: string;
+  /** Karta „Poznaj” przed startem serii. */
+  intro?: LessonIntro;
+  /** Wolny trening — bez progów, sam gracz decyduje. */
+  free?: boolean;
+  /** Gra zamiast zwykłej serii. */
+  game?: 'truefalse' | 'pairs';
+}
+
+export interface LessonIntro {
+  title: string;
+  /** Krótkie wyjaśnienie sposobu liczenia (2–3 zdania). */
+  text: string;
+  /** Przykłady pokazane na karcie, np. „2 × 7 = 7 + 7 = 14”. */
+  examples: string[];
 }

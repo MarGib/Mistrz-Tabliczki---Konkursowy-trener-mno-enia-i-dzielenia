@@ -1,4 +1,11 @@
 import { reloadIfNewVersion } from '../autoUpdate';
+import { lessonStars, lessonToConfig } from '../engine/path';
+import { findLesson } from '../data/path';
+
+function lessonConfigFor(id: string) {
+  const l = findLesson(id);
+  return l ? lessonToConfig(l) : undefined;
+}
 import { deviceHeartbeat } from '../engine/telemetry';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -884,6 +891,16 @@ export function useAppStore() {
           }
         }
 
+        // Kropki na ścieżce modułu: zaliczenie, gwiazdki (najlepszy wynik), mały bonus XP za pierwsze zaliczenie.
+        const completedLessonIds = new Set(activeBefore.completedLessonIds ?? []);
+        const lessonStarsMap = { ...(activeBefore.lessonStars ?? {}) };
+        if (session.lessonId && session.passedThreshold) {
+          if (!completedLessonIds.has(session.lessonId)) bonusXp += 25;
+          completedLessonIds.add(session.lessonId);
+          const stars = lessonStars(session, lessonConfigFor(session.lessonId));
+          lessonStarsMap[session.lessonId] = Math.max(lessonStarsMap[session.lessonId] ?? 0, stars);
+        }
+
         let masterLevel = activeBefore.masterLevel ?? 0;
         if (session.masterLevel && session.passedThreshold && session.masterLevel > masterLevel) {
           masterLevel = session.masterLevel;
@@ -941,6 +958,8 @@ export function useAppStore() {
           completedStageIds: Array.from(completedStageIds),
           earnedBadges: Array.from(earnedBadges),
           masterLevel,
+          completedLessonIds: Array.from(completedLessonIds),
+          lessonStars: lessonStarsMap,
           memories: nextMemories,
           sessions: [...activeBefore.sessions, session].slice(-40),
           tournamentBests: nextTournamentBests,

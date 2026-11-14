@@ -17,7 +17,8 @@ import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
 import { AppStatusLayer } from './components/AppStatusLayer';
-import { WhatsNewDialog } from './components/WhatsNewDialog';
+import { WhatsNewDialog, markReleaseSeen } from './components/WhatsNewDialog';
+import { HowWePlayDialog, playedBeforePath, rulesSeen } from './components/HowWePlayDialog';
 import { GuidedTour } from './help/GuidedTour';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
 
@@ -27,6 +28,8 @@ const ThemesView = lazy(() => import('./components/ThemesView').then((m) => ({ d
 const TournamentsView = lazy(() => import('./components/TournamentsView').then((m) => ({ default: m.TournamentsView })));
 const ProfileSettingsView = lazy(() => import('./components/ProfileSettingsView').then((m) => ({ default: m.ProfileSettingsView })));
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
+const TrueFalseGame = lazy(() => import('./components/TrueFalseGame').then((m) => ({ default: m.TrueFalseGame })));
+const PairsGame = lazy(() => import('./components/PairsGame').then((m) => ({ default: m.PairsGame })));
 const MyCertificates = lazy(() => import('./components/MyCertificates').then((m) => ({ default: m.MyCertificates })));
 
 function ScreenFallback() {
@@ -177,6 +180,7 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
+  const [rulesTick, setRulesTick] = useState(0);
   const [adminOpen, setAdminOpen] = useState(() => window.location.hash === '#admin');
   useEffect(() => {
     const onHash = () => setAdminOpen(window.location.hash === '#admin');
@@ -223,10 +227,22 @@ export default function App() {
         </Suspense>
       )}
       {activeProfile && !showWelcomeGate && (
-        <WhatsNewDialog
-          enabled={!activeSeries && !adminOpen}
-          isNewPlayer={(activeProfile.sessions?.length ?? 0) < 3}
-        />
+        <>
+          {/* Nowe zasady (ścieżka z kropkami) — raz dla każdego, kto już grał; nowi dostają przewodnik. */}
+          <HowWePlayDialog
+            profileId={activeProfile.id}
+            enabled={!activeSeries && !adminOpen && playedBeforePath(activeProfile.sessions)}
+            onClose={() => {
+              markReleaseSeen(); // nowe zasady już opisują nowości — bez drugiego okienka
+              setRulesTick((t) => t + 1);
+            }}
+          />
+          <WhatsNewDialog
+            key={`wn-${rulesTick}`}
+            enabled={!activeSeries && !adminOpen && rulesSeen(activeProfile.id)}
+            isNewPlayer={(activeProfile.sessions?.length ?? 0) < 3}
+          />
+        </>
       )}
       {activeProfile && !showWelcomeGate && (
         <GuidedTour
@@ -300,7 +316,25 @@ export default function App() {
                 />
               ))}
             <Suspense fallback={<ScreenFallback />}>
-            {activeSeries ? (
+            {activeSeries?.game === 'truefalse' ? (
+              <TrueFalseGame
+                key={`tf-${activeSeries.lessonId}`}
+                config={activeSeries}
+                memories={activeProfile.memories}
+                soundEnabled={activeProfile.settings.soundEnabled}
+                onCompleteSession={recordCompletedSession}
+                onExit={() => setActiveSeries(null)}
+              />
+            ) : activeSeries?.game === 'pairs' ? (
+              <PairsGame
+                key={`pairs-${activeSeries.lessonId}`}
+                config={activeSeries}
+                memories={activeProfile.memories}
+                soundEnabled={activeProfile.settings.soundEnabled}
+                onCompleteSession={recordCompletedSession}
+                onExit={() => setActiveSeries(null)}
+              />
+            ) : activeSeries ? (
               <ExerciseArena
                 key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}
                 config={activeSeries}

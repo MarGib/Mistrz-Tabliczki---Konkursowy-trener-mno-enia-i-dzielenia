@@ -4,7 +4,11 @@ export type HelpSectionId =
   | 'login'
   | 'install'
   | 'tour'
+  | 'how'
+  | 'privacy'
   | 'training'
+  | 'free'
+  | 'dots'
   | 'hints'
   | 'path'
   | 'master'
@@ -53,7 +57,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     lead: 'Konto to Twój login i hasło. Dzięki nim wyniki zapisują się w chmurze i są na każdym urządzeniu.',
     steps: [
       'Na ekranie startowym wybierz „Utwórz nowe konto”.',
-      'Wpisz login (np. imię lub ksywkę) — to nim będziesz się logować.',
+      'Wpisz dowolny login (ksywkę) albo naciśnij 🎲 — aplikacja sama wymyśli login. Nie podajesz e-maila ani żadnych danych.',
       'Wymyśl hasło lub PIN (min. 4 znaki). Ikonka oka pokaże, co wpisujesz.',
       'Wybierz awatar i naciśnij „Utwórz konto i zacznij trening”.',
       'Po wejściu pokaże się krótki przewodnik po aplikacji — warto go przejść.',
@@ -105,12 +109,53 @@ export const HELP_SECTIONS: HelpSection[] = [
 
   /* ---------------------------- Trening i wyzwania ---------------------------- */
   {
+    id: 'how',
+    chapter: 'play',
+    title: 'Jak gramy — w skrócie',
+    lead: 'Najprościej: naciśnij duży zielony przycisk „Graj dalej”. Aplikacja sama wie, co dziś warto ćwiczyć.',
+    steps: [
+      'Ścieżka ma moduły (1, 2, 3…). W każdym jest kilka kropek: najpierw „Poznaj” (sposób liczenia), potem ćwiczenia i gry, na końcu test modułu.',
+      'Kropka trwa 2–3 minuty. Za kropkę dostajesz 1–3 gwiazdki. Możesz je poprawiać, kiedy chcesz.',
+      'Test modułu (puchar 🏆) otwiera się po kropkach. Zdany test = moduł ukończony, odznaka i certyfikat.',
+      'Umiesz już? Naciśnij „Znam to — sprawdź mnie” i od razu zrób test.',
+      'Chcesz po swojemu? Wolny trening: sam wybierasz, co, ile i jak.',
+    ],
+    tip: 'Nie ma żyć, kar ani straszenia. Pomyłka to informacja — aplikacja zapamięta, co powtórzyć. 3 kropki dziennie to świetny wynik.',
+  },
+  {
+    id: 'dots',
+    chapter: 'play',
+    title: 'Rodzaje kropek',
+    lead: 'Kropki są różne, żeby nie było nudno i żeby uczyć się na kilka sposobów.',
+    steps: [
+      '👀 Poznaj — krótki sposób liczenia z przykładami, potem kilka zadań bez pośpiechu.',
+      '🎯 Trening w punkt — tylko 1–2 tabliczki naraz.',
+      '❓ Luka — brakuje liczby w środku: „? × 6 = 42”.',
+      '✅ Prawda czy fałsz — 60 sekund, oceniasz, czy wynik jest dobry.',
+      '🧩 Pary — łączysz działanie z wynikiem.',
+      '⏱️ Wyścig — ile zdążysz w 60 sekund. 📖 Historyjka — zadanie z życia. 🔥 Twoje najtrudniejsze — to, co sprawia kłopot.',
+    ],
+  },
+  {
+    id: 'free',
+    chapter: 'play',
+    title: 'Wolny trening — Ty decydujesz',
+    lead: 'Bez ścieżki, bez progów i bez zaliczeń. Sam wybierasz, co ćwiczysz. Wyniki i powtórki zapisują się jak zawsze.',
+    steps: [
+      'Zakładka Trening → sekcja „Wolny trening”.',
+      'Co: mnożenie, dzielenie albo mix. Ile: 10 lub 20 zadań albo 2, 5, 10 minut.',
+      'Zakres liczb i wybrane tabliczki (np. tylko × 7 i × 8).',
+      'Forma: zwykłe działanie, luka („? × 8 = 56”) albo historyjki.',
+      '„Tylko moje trudne” — aplikacja dobierze działania, przy których się mylisz albo myślisz najdłużej.',
+    ],
+  },
+  {
     id: 'training',
     chapter: 'play',
     title: 'Trening i klawiatura',
-    lead: 'Szybki trening to seria zadań z mnożenia i dzielenia. Odpowiedź wpisujesz na dużej klawiaturze.',
+    lead: 'Odpowiedź wpisujesz na dużej klawiaturze (albo na klawiaturze komputera). Na tablecie klawiatura wypełnia cały ekran.',
     steps: [
-      'Naciśnij „Szybki Trening” (na komputerze u góry) albo „Rozpocznij serię” w zakładce Trening.',
+      'Zacznij od „Graj dalej”, kropki na ścieżce albo wolnego treningu.',
       'Wpisz wynik cyframi i naciśnij „Sprawdź”. Zero jest szerokie — trudno w nie nie trafić.',
       'Pomarańczowy przycisk ⌫ kasuje ostatnią cyfrę. Przytrzymaj go, aby wyczyścić całą odpowiedź.',
       'Na końcu serii zobaczysz celność, tempo i działania, które warto powtórzyć.',
@@ -135,14 +180,15 @@ export const HELP_SECTIONS: HelpSection[] = [
   {
     id: 'path',
     chapter: 'play',
-    title: 'Ścieżka Mistrza: Podstawy i Liga Mistrzów',
-    lead: 'Ścieżka to 13 etapów — od rozgrzewki do zadań do 1000. Każdy kolejny odblokowuje się po zaliczeniu poprzedniego.',
+    title: 'Ścieżka Mistrza: moduły i kropki',
+    lead: '14 modułów od najłatwiejszych tabliczek do zadań do 1000. Moduł = kilka kropek + test. Kolejny moduł otwiera się po teście poprzedniego.',
     steps: [
-      'Pasek u góry pokazuje, ile etapów masz już za sobą (np. „6 / 13 etapów”).',
-      'Zakładki: „Podstawy” (zadania do 100, etapy 1–6) i „👑 Liga Mistrzów” (ponad 100: do 144, 200, 500 i 1000).',
-      'Duża karta „Następny etap” to ten, który teraz gramy — naciśnij „Graj”.',
-      'Poniżej krótka lista: ✓ zaliczone (można powtarzać), 🔒 jeszcze zablokowane.',
-      'Etap zaliczasz, gdy zdobędziesz wymagany próg celności (np. 85%). Nagroda: XP, odznaka i certyfikat.',
+      'Podstawy (moduły 1–6) idą po kolei przez tabliczki: × 2 i × 10 → × 5 i × 3 → × 4, × 6, × 9 → × 7 i × 8 → cała tabliczka → na wyrywki.',
+      '🌉 Most do Ligi uczy × 11, × 12 i sposobu na mnożenie dwucyfrowe — dopiero potem Liga Mistrzów (do 144, 200, 500, 1000).',
+      'Kafelki u góry to moduły: ✓ ukończony, „2/5” w trakcie, 🔒 zablokowany. Dotknij, żeby zobaczyć kropki.',
+      'Pulsująca kropka to ta, którą teraz gramy. Ukończone kropki pokazują gwiazdki ★.',
+      'Wszystkie kropki na 3 gwiazdki = korona modułu 👑 (dla chętnych, nie trzeba).',
+      'Wcześniej zaliczone etapy liczą się jako ukończone moduły — nikt nic nie stracił.',
     ],
     image: 'help/sciezka.webp',
     imageAlt: 'Ścieżka Mistrza: postęp, zakładki lig, następny etap i lista etapów',
@@ -339,6 +385,18 @@ export const HELP_SECTIONS: HelpSection[] = [
   },
 
   /* ------------------------------- Dla rodzica ------------------------------- */
+  {
+    id: 'privacy',
+    chapter: 'parent',
+    title: 'Prywatność: żadnych danych osobowych',
+    lead: 'Aplikacja nie potrzebuje żadnych danych o dziecku. Nie podajemy e-maila, nazwiska, telefonu, wieku ani szkoły.',
+    steps: [
+      'Konto to dowolny login (ksywka albo wylosowany przyciskiem 🎲) i hasło. Awatar to obrazek, nie zdjęcie.',
+      'Zapisujemy tylko wyniki gry: które działania, ile poprawnie, w jakim tempie — po to, żeby gracz i rodzic widzieli postęp.',
+      'Wyniki widzą tylko członkowie Twojej grupy (np. rodzina), i tylko jeśli tego chcesz.',
+      'Brak reklam, brak śledzenia, brak sprzedaży danych. Aplikacja jest darmowa.',
+    ],
+  },
   {
     id: 'parent',
     chapter: 'parent',
