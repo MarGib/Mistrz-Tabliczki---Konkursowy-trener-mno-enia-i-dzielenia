@@ -16,10 +16,12 @@ import {
 } from '../engine/accountSecurity';
 import {
   type ArenaPlayerCard,
+  arenaPlayerCardToUserProfile,
   doesProfileNeedCloudPush,
   mergeCompetitionProfiles,
   mergeNotifications,
   mergeProfiles,
+  mergeSingleProfile,
   sanitizeFirestoreId,
 } from '../engine/cloudMerge';
 import {
@@ -43,6 +45,21 @@ import {
 } from '../engine/cloudSync';
 import { generateSessionNotifications } from '../engine/familyNotifications';
 import {
+  type CirclePlayerCard,
+  changeAccountPassword,
+  createCircle,
+  describeAccountError,
+  getSignedInAccountUid,
+  joinCircleByCode,
+  leaveCircle,
+  publishCircleCards,
+  pushAccountProfile,
+  registerOrSignInAccount,
+  signInAccountAndFetch,
+  subscribeAccountProfile,
+  subscribeCirclePlayers,
+} from '../engine/accountCloud';
+import {
   type SchoolDirectoryEntry,
   loadLocalSchoolDirectory,
   mergeSchoolDirectories,
@@ -50,10 +67,12 @@ import {
   saveLocalSchoolDirectory,
 } from '../engine/schoolDirectory';
 import { computeTournamentMedal, updateFactMemory } from '../engine/spacedRepetition';
+import { createFreshProfile as createFreshProfileForCloud } from '../data/curriculum';
 import { auth, formatFirebaseError } from '../firebase';
 import type {
   AppSettings,
   AvatarSpec,
+  CircleMembership,
   ColorTheme,
   FamilyNotification,
   SessionRecord,
@@ -62,6 +81,23 @@ import type {
 } from '../types/math';
 
 const STORAGE_KEY = 'mistrz_tabliczki_store_v3';
+
+/** Przerywa operację, która nie odpowiada — dzięki temu UI nigdy nie wisi na „Łączenie…”. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        window.clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
 const LEGACY_STORAGE_KEYS = [
   'mistrz_tabliczki_store_v2',
   'mistrz_tabliczki_store_v1',
@@ -69,6 +105,31 @@ const LEGACY_STORAGE_KEYS = [
 ];
 
 export type CloudSyncStatus = 'offline' | 'connecting' | 'synced' | 'error';
+
+/** Stan synchronizacji konta login + hasło (per profil). */
+export interface AccountSyncState {
+  state: 'local' | 'needs-password' | 'syncing' | 'synced' | 'error';
+  message?: string;
+}
+
+function profileLogin(p: Pick<UserProfile, 'login' | 'name'>): string {
+  return normalizeLogin(p.login || p.name);
+}
+
+function accountFingerprint(p: UserProfile): string {
+  return [
+    p.xp,
+    p.sessions?.length ?? 0,
+    p.name,
+    p.avatarId,
+    p.activeThemeId ?? '',
+    p.streakDays,
+    (p.customThemes ?? []).length,
+    JSON.stringify(p.circles ?? []),
+    JSON.stringify(p.settings ?? {}),
+    JSON.stringify(p.customAvatarSpec ?? {}),
+  ].join('|');
+}
 
 export interface StoreState {
   activeProfileId: string;
@@ -220,10 +281,47 @@ export function useAppStore() {
   );
   const pushedFingerprintRef = useRef<Map<string, string>>(new Map());
 
-  const competitionProfiles = useMemo(
-    () => mergeCompetitionProfiles(store.profiles, arenaPlayers),
-    [store.profiles, arenaPlayers]
+  // ---- Konta login + hasło i grupy ----
+  const [accountSync, setAccountSync] = useState<Record<string, AccountSyncState>>({});
+  const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
+  const [circlePlayers, setCirclePlayers] = useState<CirclePlayerCard[]>([]);
+  const [circleError, setCircleError] = useState<string | null>(null);
+  void arenaPlayers;
+  void mergeCompetitionProfiles;
+
+  const linkAccountRef = useRef<(profileId: string, password: string) => Promise<void>>(
+    async () => {}
   );
+  const setSyncFor = useCallback((profileId: string, next: AccountSyncState) => {
+    setAccountSync((prev) => ({ ...prev, [profileId]: next }));
+  }, []);
+
+  const activeProfileForCircles =
+    store.profiles.find((p) => p.id === store.activeProfileId) ?? store.profiles[0];
+  const activeCircles = activeProfileForCircles?.circles ?? [];
+  const effectiveCircleId =
+    selectedCircleId && activeCircles.some((c) => c.id === selectedCircleId)
+      ? selectedCircleId
+      : null;
+
+  // Porównywanie: w wybranej grupie — jej członkowie; bez grupy — konta z tego urządzenia.
+  const competitionProfiles = useMemo(() => {
+    const own = store.profiles.filter((p) => store.ownedProfileIds.includes(p.id));
+    if (!effectiveCircleId) return own.length > 0 ? own : store.profiles;
+    const me = activeProfileForCircles;
+    const meCircle = activeCircles.find((c) => c.id === effectiveCircleId);
+    const others = circlePlayers
+      .filter((c) => !me || c.profileId !== me.id)
+      .map((c) => arenaPlayerCardToUserProfile(c));
+    return me && meCircle?.share !== false ? [me, ...others] : others;
+  }, [
+    store.profiles,
+    store.ownedProfileIds,
+    effectiveCircleId,
+    circlePlayers,
+    activeProfileForCircles,
+    activeCircles,
+  ]);
 
   const schoolDirectory = useMemo(
     () => mergeSchoolDirectories([remoteSchools, localDirectorySeed], competitionProfiles),
@@ -289,10 +387,10 @@ export function useAppStore() {
 
       try {
         const snapshot = storeRef.current;
-        const meta = await ensureCloudGroupForUser(
-          user,
-          snapshot.profiles,
-          snapshot.activeProfileId
+        const meta = await withTimeout(
+          ensureCloudGroupForUser(user, snapshot.profiles, snapshot.activeProfileId),
+          25000,
+          'Baza nie odpowiada. Sprawdź internet i spróbuj połączyć ponownie.'
         );
         if (cancelled) return;
 
@@ -901,6 +999,17 @@ export function useAppStore() {
       if (updatedTarget) {
         syncProfileIfConnected(updatedTarget);
       }
+      const trimmed = password.trim();
+      if (trimmed.length >= 4) {
+        const target = storeRef.current.profiles.find((p) => p.id === profileId);
+        const signedIn =
+          target?.cloudUid && accountSyncRef.current[profileId]?.state === 'synced';
+        if (target && signedIn && !verifyAccountCredentials(target, trimmed)) {
+          void changeAccountPassword(profileLogin(target), trimmed).catch(() => {});
+        } else {
+          window.setTimeout(() => void linkAccountRef.current(profileId, trimmed), 0);
+        }
+      }
     },
     [syncProfileIfConnected]
   );
@@ -963,7 +1072,11 @@ export function useAppStore() {
     setCloudError(null);
     setCloudStatus('connecting');
     try {
-      await signInWithGoogleCloud();
+      await withTimeout(
+        signInWithGoogleCloud(),
+        180000,
+        'Logowanie Google nie zostało dokończone. Spróbuj ponownie.'
+      );
     } catch (err) {
       setCloudStatus('error');
       setCloudError(formatFirebaseError(err));
@@ -1025,6 +1138,416 @@ export function useAppStore() {
     []
   );
 
+
+  /* ===================== Konta login + hasło (Firebase) ===================== */
+  const accountSyncRef = useRef(accountSync);
+  accountSyncRef.current = accountSync;
+  const pendingPasswordsRef = useRef<Map<string, string>>(new Map());
+  const pushedAccountFpRef = useRef<Map<string, string>>(new Map());
+
+  const mergeCloudIntoLocal = useCallback(
+    (local: UserProfile | undefined, cloud: UserProfile, uid: string): UserProfile => {
+      const base = local ? mergeSingleProfile(local, { ...cloud, id: local.id }) : cloud;
+      return {
+        ...base,
+        id: local?.id ?? cloud.id,
+        login: local?.login ?? cloud.login,
+        passwordHash: local?.passwordHash ?? cloud.passwordHash,
+        cloudUid: uid,
+        circles: cloud.circles ?? local?.circles ?? [],
+      };
+    },
+    []
+  );
+
+  const linkAccount = useCallback(
+    async (profileId: string, password: string) => {
+      const p = storeRef.current.profiles.find((x) => x.id === profileId);
+      if (!p || !password) return;
+      const login = profileLogin(p);
+      setSyncFor(profileId, { state: 'syncing' });
+      try {
+        if (p.cloudUid) {
+          const uid = await getSignedInAccountUid(login);
+          if (uid === p.cloudUid) {
+            setSyncFor(profileId, { state: 'synced' });
+            return;
+          }
+        }
+        const res = await withTimeout(
+          registerOrSignInAccount(p, password),
+          20000,
+          'Baza nie odpowiada. Spróbuj ponownie za chwilę.'
+        );
+        setStore((prev) => ({
+          ...prev,
+          profiles: prev.profiles.map((x) =>
+            x.id !== profileId
+              ? x
+              : res.cloudProfile
+              ? mergeCloudIntoLocal(x, res.cloudProfile, res.uid)
+              : { ...x, cloudUid: res.uid }
+          ),
+        }));
+        pendingPasswordsRef.current.delete(profileId);
+        setSyncFor(profileId, { state: 'synced' });
+      } catch (err) {
+        const code = (err as { code?: string })?.code ?? '';
+        if (code === 'auth/network-request-failed') {
+          pendingPasswordsRef.current.set(profileId, password);
+        }
+        setSyncFor(profileId, { state: 'error', message: describeAccountError(err) });
+      }
+    },
+    [mergeCloudIntoLocal, setSyncFor]
+  );
+
+  linkAccountRef.current = linkAccount;
+
+  // Ponów synchronizację kont po powrocie internetu.
+  useEffect(() => {
+    const onOnline = () => {
+      for (const [id, pwd] of pendingPasswordsRef.current.entries()) {
+        void linkAccount(id, pwd);
+      }
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [linkAccount]);
+
+  // Po odświeżeniu strony: które konta mają zapamiętaną sesję w chmurze?
+  const ownedCloudKey = store.profiles
+    .filter((p) => store.ownedProfileIds.includes(p.id))
+    .map((p) => `${p.id}:${p.cloudUid ?? ''}:${p.passwordHash ? 1 : 0}`)
+    .join(',');
+  useEffect(() => {
+    let cancelled = false;
+    const snapshot = storeRef.current;
+    for (const p of snapshot.profiles) {
+      if (!snapshot.ownedProfileIds.includes(p.id)) continue;
+      const current = accountSyncRef.current[p.id]?.state;
+      if (current === 'synced' || current === 'syncing') continue;
+      if (!p.cloudUid) {
+        setSyncFor(p.id, {
+          state: p.passwordHash ? 'needs-password' : 'local',
+          message: p.passwordHash
+            ? 'Wpisz hasło jeszcze raz, aby włączyć synchronizację.'
+            : 'Ustaw hasło, aby zapisywać wyniki w chmurze i dołączać do grup.',
+        });
+        continue;
+      }
+      void getSignedInAccountUid(profileLogin(p)).then((uid) => {
+        if (cancelled) return;
+        setSyncFor(
+          p.id,
+          uid === p.cloudUid
+            ? { state: 'synced' }
+            : { state: 'needs-password', message: 'Wpisz hasło, aby wznowić synchronizację.' }
+        );
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [ownedCloudKey, setSyncFor]);
+
+  // Wysyłanie zmian (wyniki, ustawienia, grupy) do chmury z małym opóźnieniem.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      for (const p of store.profiles) {
+        if (!p.cloudUid || !store.ownedProfileIds.includes(p.id)) continue;
+        if (accountSync[p.id]?.state !== 'synced') continue;
+        const fp = accountFingerprint(p);
+        if (pushedAccountFpRef.current.get(p.id) === fp) continue;
+        pushedAccountFpRef.current.set(p.id, fp);
+        void pushAccountProfile(p).catch(() => pushedAccountFpRef.current.delete(p.id));
+        void publishCircleCards(p).catch(() => {});
+      }
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [store.profiles, store.ownedProfileIds, accountSync]);
+
+  // Na żywo: zmiany tego samego konta z innego urządzenia.
+  const activeSynced =
+    Boolean(activeProfile.cloudUid) && accountSync[activeProfile.id]?.state === 'synced';
+  const activeLoginKey = profileLogin(activeProfile);
+  useEffect(() => {
+    if (!activeSynced) return;
+    const activeId = activeProfile.id;
+    const uid = activeProfile.cloudUid as string;
+    return subscribeAccountProfile(activeLoginKey, (cloudProf) => {
+      setStore((prev) => ({
+        ...prev,
+        profiles: prev.profiles.map((x) =>
+          x.id === activeId ? mergeCloudIntoLocal(x, cloudProf, uid) : x
+        ),
+      }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSynced, activeProfile.id, activeLoginKey, mergeCloudIntoLocal]);
+
+  const createAccountWithCloud = useCallback(
+    async (
+      name: string,
+      avatarId: string,
+      password: string
+    ): Promise<{ ok: boolean; error?: string }> => {
+      const trimmedName = name.trim();
+      const pwd = password.trim();
+      if (!trimmedName) return { ok: false, error: 'Podaj nazwę gracza.' };
+      if (pwd.length < 4) {
+        return { ok: false, error: 'Hasło lub PIN musi mieć co najmniej 4 znaki.' };
+      }
+      const login = normalizeLogin(trimmedName);
+      if (storeRef.current.profiles.some((p) => profileLogin(p) === login)) {
+        return { ok: false, error: 'Konto o takim loginie już jest na tym urządzeniu. Zaloguj się w „Mam już konto”.' };
+      }
+      const base = createFreshProfileForCloud(trimmedName, avatarId, Date.now());
+      const created: UserProfile = {
+        ...base,
+        login,
+        passwordHash: hashAccountPassword(pwd, base.id),
+        circles: [],
+      };
+
+      let finalProfile: UserProfile = created;
+      let syncState: AccountSyncState = { state: 'synced' };
+      try {
+        const res = await withTimeout(
+          registerOrSignInAccount(created, pwd),
+          20000,
+          'Baza nie odpowiada.'
+        );
+        finalProfile = res.cloudProfile
+          ? {
+              ...res.cloudProfile,
+              login,
+              passwordHash: hashAccountPassword(pwd, res.cloudProfile.id),
+              cloudUid: res.uid,
+            }
+          : { ...created, cloudUid: res.uid };
+      } catch (err) {
+        const code = (err as { code?: string })?.code ?? '';
+        if (code === 'login-taken' || code === 'auth/email-already-in-use') {
+          return { ok: false, error: describeAccountError(err) };
+        }
+        // Brak internetu: konto działa lokalnie i zsynchronizuje się później.
+        pendingPasswordsRef.current.set(created.id, pwd);
+        syncState = {
+          state: 'error',
+          message: 'Brak połączenia — konto zsynchronizuje się, gdy wróci internet.',
+        };
+      }
+
+      setStore((prev) => ({
+        ...prev,
+        activeProfileId: finalProfile.id,
+        profiles: [...prev.profiles.filter((p) => p.id !== finalProfile.id), finalProfile],
+        ownedProfileIds: prev.ownedProfileIds.includes(finalProfile.id)
+          ? prev.ownedProfileIds
+          : [...prev.ownedProfileIds, finalProfile.id],
+        hasSelectedProfile: true,
+      }));
+      setSyncFor(finalProfile.id, syncState);
+      return { ok: true };
+    },
+    [setSyncFor]
+  );
+
+  /** „Mam już konto”: login + hasło — najpierw to urządzenie, potem chmura. */
+  const loginToCloudAccount = useCallback(
+    async (loginInput: string, passwordInput: string): Promise<{ ok: boolean; error?: string }> => {
+      const login = normalizeLogin(loginInput);
+      const pwd = passwordInput.trim();
+      if (!loginInput.trim()) return { ok: false, error: 'Wpisz swój login.' };
+
+      const local = storeRef.current.profiles.find((p) => profileLogin(p) === login);
+      if (local && hasAccountPassword(local) && verifyAccountCredentials(local, pwd, loginInput)) {
+        setStore((prev) => ({
+          ...prev,
+          activeProfileId: local.id,
+          ownedProfileIds: prev.ownedProfileIds.includes(local.id)
+            ? prev.ownedProfileIds
+            : [...prev.ownedProfileIds, local.id],
+          hasSelectedProfile: true,
+        }));
+        void linkAccount(local.id, pwd);
+        return { ok: true };
+      }
+      if (!pwd) return { ok: false, error: 'Wpisz hasło lub PIN.' };
+
+      try {
+        const res = await withTimeout(
+          signInAccountAndFetch(login, pwd),
+          20000,
+          'Baza nie odpowiada. Sprawdź internet.'
+        );
+        const cloud = res.profile;
+        setStore((prev) => {
+          const existing = prev.profiles.find((p) => p.id === cloud.id);
+          const merged: UserProfile = {
+            ...(existing ? mergeCloudIntoLocal(existing, cloud, res.uid) : cloud),
+            login,
+            passwordHash: hashAccountPassword(pwd, cloud.id),
+            cloudUid: res.uid,
+          };
+          return {
+            ...prev,
+            activeProfileId: merged.id,
+            profiles: [...prev.profiles.filter((p) => p.id !== merged.id), merged],
+            ownedProfileIds: prev.ownedProfileIds.includes(merged.id)
+              ? prev.ownedProfileIds
+              : [...prev.ownedProfileIds, merged.id],
+            hasSelectedProfile: true,
+          };
+        });
+        setSyncFor(cloud.id, { state: 'synced' });
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: describeAccountError(err) };
+      }
+    },
+    [linkAccount, mergeCloudIntoLocal, setSyncFor]
+  );
+
+  /* ============================== Grupy ============================== */
+  const updateProfileCircles = useCallback(
+    (profileId: string, updater: (list: CircleMembership[]) => CircleMembership[]) => {
+      setStore((prev) => ({
+        ...prev,
+        profiles: prev.profiles.map((p) =>
+          p.id === profileId ? { ...p, circles: updater(p.circles ?? []) } : p
+        ),
+      }));
+    },
+    []
+  );
+
+  const requireSyncedActive = useCallback((): UserProfile | string => {
+    const snap = storeRef.current;
+    const p = snap.profiles.find((x) => x.id === snap.activeProfileId);
+    if (!p) return 'Najpierw wybierz konto.';
+    if (!p.cloudUid || accountSyncRef.current[p.id]?.state !== 'synced') {
+      return 'Grupy działają dla kont z hasłem zsynchronizowanych w chmurze. Ustaw lub wpisz hasło w zakładce Konto.';
+    }
+    return p;
+  }, []);
+
+  const createGroup = useCallback(
+    async (name: string): Promise<{ ok: boolean; error?: string }> => {
+      const p = requireSyncedActive();
+      if (typeof p === 'string') return { ok: false, error: p };
+      try {
+        const m = await withTimeout(createCircle(profileLogin(p), name), 20000, 'Baza nie odpowiada.');
+        updateProfileCircles(p.id, (list) => [...list.filter((c) => c.id !== m.id), m]);
+        setSelectedCircleId(m.id);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: describeAccountError(err) };
+      }
+    },
+    [requireSyncedActive, updateProfileCircles]
+  );
+
+  const joinGroup = useCallback(
+    async (code: string): Promise<{ ok: boolean; error?: string }> => {
+      const p = requireSyncedActive();
+      if (typeof p === 'string') return { ok: false, error: p };
+      try {
+        const m = await withTimeout(joinCircleByCode(profileLogin(p), code), 20000, 'Baza nie odpowiada.');
+        updateProfileCircles(p.id, (list) => [...list.filter((c) => c.id !== m.id), m]);
+        setSelectedCircleId(m.id);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: describeAccountError(err) };
+      }
+    },
+    [requireSyncedActive, updateProfileCircles]
+  );
+
+  const leaveGroup = useCallback(
+    async (circleId: string): Promise<{ ok: boolean; error?: string }> => {
+      const p = requireSyncedActive();
+      if (typeof p === 'string') return { ok: false, error: p };
+      try {
+        await leaveCircle(profileLogin(p), circleId);
+      } catch (err) {
+        return { ok: false, error: describeAccountError(err) };
+      }
+      updateProfileCircles(p.id, (list) => list.filter((c) => c.id !== circleId));
+      setSelectedCircleId((cur) => (cur === circleId ? null : cur));
+      return { ok: true };
+    },
+    [requireSyncedActive, updateProfileCircles]
+  );
+
+  const setGroupShare = useCallback(
+    (circleId: string, share: boolean) => {
+      const snap = storeRef.current;
+      updateProfileCircles(snap.activeProfileId, (list) =>
+        list.map((c) => (c.id === circleId ? { ...c, share } : c))
+      );
+    },
+    [updateProfileCircles]
+  );
+
+  // Wyniki członków wszystkich grup aktywnego konta + powiadomienia o wyprzedzeniu.
+  const [playersByCircle, setPlayersByCircle] = useState<Record<string, CirclePlayerCard[]>>({});
+  const circlesKey = activeCircles.map((c) => c.id).join(',');
+  useEffect(() => {
+    setPlayersByCircle({});
+    setCircleError(null);
+    if (!activeSynced || activeCircles.length === 0) return;
+    const meId = activeProfile.id;
+    const unsubs = activeCircles.map((circle) => {
+      const prevXp = new Map<string, number>();
+      let first = true;
+      return subscribeCirclePlayers(
+        activeLoginKey,
+        circle.id,
+        (players) => {
+          setPlayersByCircle((prev) => ({ ...prev, [circle.id]: players }));
+          const me = storeRef.current.profiles.find((x) => x.id === meId);
+          if (!first && me) {
+            const fresh: FamilyNotification[] = [];
+            for (const pl of players) {
+              if (pl.profileId === me.id) continue;
+              const before = prevXp.get(pl.uid);
+              if (before !== undefined && before <= me.xp && pl.xp > me.xp) {
+                fresh.push({
+                  id: `ovt-${circle.id}-${pl.uid}-${Date.now()}`,
+                  createdAt: Date.now(),
+                  type: 'xp_overtake',
+                  actorProfileId: pl.profileId,
+                  actorName: pl.name,
+                  targetProfileId: me.id,
+                  title: `${pl.name} wyprzedza Cię w grupie „${circle.name}”!`,
+                  message: `${pl.name} ma ${pl.xp} XP, a Ty ${me.xp} XP. Jedna seria i możesz odzyskać miejsce!`,
+                  readByProfileIds: [],
+                });
+              }
+            }
+            if (fresh.length > 0) {
+              setStore((prev) => ({
+                ...prev,
+                notifications: [...fresh, ...(prev.notifications ?? [])].slice(0, 80),
+              }));
+            }
+          }
+          first = false;
+          for (const pl of players) prevXp.set(pl.uid, pl.xp);
+        },
+        (err) => setCircleError(describeAccountError(err))
+      );
+    });
+    return () => unsubs.forEach((u) => u());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSynced, activeProfile.id, activeLoginKey, circlesKey]);
+
+  useEffect(() => {
+    setCirclePlayers(effectiveCircleId ? playersByCircle[effectiveCircleId] ?? [] : []);
+  }, [effectiveCircleId, playersByCircle]);
+
   const resetLocalData = useCallback(() => {
     setStore({
       activeProfileId: '',
@@ -1065,5 +1588,16 @@ export function useAppStore() {
     disconnectGoogleCloud,
     joinGroupCode,
     resetLocalData,
+    accountSync,
+    loginToCloudAccount,
+    createAccountWithCloud,
+    selectedCircleId: effectiveCircleId,
+    setSelectedCircleId,
+    circles: activeCircles,
+    circleError,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    setGroupShare,
   };
 }

@@ -19,17 +19,13 @@ import {
   verifyAccountCredentials,
 } from '../engine/accountSecurity';
 import type { CloudSessionMeta } from '../engine/cloudSync';
-import type { SchoolDirectoryEntry } from '../engine/schoolDirectory';
 import { computeUserLevel } from '../engine/spacedRepetition';
 import type { CloudSyncStatus } from '../store/useAppStore';
-import type { AvatarSpec, DeviceProfile, UserProfile } from '../types/math';
+import type { DeviceProfile, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
-import { SchoolClassSelector } from './SchoolClassSelector';
 
 interface FamilyWelcomeGateProps {
   ownedProfiles: UserProfile[];
-  hasGroupAccounts: boolean;
-  schoolDirectory: SchoolDirectoryEntry[];
   device: DeviceProfile;
   cloudMeta?: CloudSessionMeta | null;
   cloudStatus: CloudSyncStatus;
@@ -39,16 +35,12 @@ interface FamilyWelcomeGateProps {
   onLoginWithCredentials: (
     login: string,
     password: string
-  ) => { ok: boolean; error?: string };
+  ) => Promise<{ ok: boolean; error?: string }>;
   onCreateProfile: (
     name: string,
     avatarId: string,
-    customSpec?: AvatarSpec,
-    login?: string,
-    password?: string,
-    schoolName?: string,
-    className?: string
-  ) => void;
+    password: string
+  ) => Promise<{ ok: boolean; error?: string }>;
   onConnectGoogle: () => void;
 }
 
@@ -56,8 +48,6 @@ type GateMode = 'list' | 'create' | 'existing';
 
 export function FamilyWelcomeGate({
   ownedProfiles,
-  hasGroupAccounts,
-  schoolDirectory,
   device,
   cloudMeta = null,
   cloudStatus,
@@ -80,9 +70,9 @@ export function FamilyWelcomeGate({
   // Create account form
   const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newSchool, setNewSchool] = useState('');
-  const [newClass, setNewClass] = useState('');
-  const [duplicateClassBlocked, setDuplicateClassBlocked] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [existingBusy, setExistingBusy] = useState(false);
   const [selectedAvatarId, setSelectedAvatarId] = useState(
     ILLUSTRATED_MASCOTS[0]?.id ?? 'owl'
   );
@@ -120,15 +110,20 @@ export function FamilyWelcomeGate({
         setAuthError('Nieprawidłowy login lub hasło. Spróbuj ponownie.');
         return;
       }
-      onSelectProfile(selectedMember.id);
+      // Hasło poprawne — wejdź i (w tle) włącz synchronizację konta w chmurze.
+      onSetCredentialsAndEnter(
+        selectedMember.id,
+        selectedMember.login || loginInput || selectedMember.name,
+        passwordInput.trim()
+      );
       return;
     }
 
-    if (passwordInput.trim().length > 0 && passwordInput.trim().length < 3) {
-      setAuthError('Hasło powinno mieć przynajmniej 3 znaki (albo wejdź bez hasła).');
+    if (passwordInput.trim().length > 0 && passwordInput.trim().length < 4) {
+      setAuthError('Hasło lub PIN powinno mieć przynajmniej 4 znaki (albo wejdź bez hasła).');
       return;
     }
-    if (passwordInput.trim().length >= 3) {
+    if (passwordInput.trim().length >= 4) {
       onSetCredentialsAndEnter(
         selectedMember.id,
         loginInput || selectedMember.name,
@@ -139,29 +134,31 @@ export function FamilyWelcomeGate({
     }
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newName.trim();
-    if (!trimmed || duplicateClassBlocked) return;
-    onCreateProfile(
-      trimmed,
-      selectedAvatarId,
-      undefined,
-      normalizeLogin(trimmed),
-      newPassword.trim() || undefined,
-      newSchool.trim() || undefined,
-      newClass.trim() || undefined
-    );
+    if (!trimmed || createBusy) return;
+    if (newPassword.trim().length < 4) {
+      setCreateError('Hasło lub PIN musi mieć co najmniej 4 znaki.');
+      return;
+    }
+    setCreateBusy(true);
+    setCreateError(null);
+    const result = await onCreateProfile(trimmed, selectedAvatarId, newPassword.trim());
+    setCreateBusy(false);
+    if (!result.ok) setCreateError(result.error ?? 'Nie udało się utworzyć konta.');
   };
 
-  const handleExistingLoginSubmit = (e: React.FormEvent) => {
+  const handleExistingLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setExistingError(null);
     if (!existingLogin.trim()) {
-      setExistingError('Wpisz swój login lub nazwę użytkownika.');
+      setExistingError('Wpisz swój login.');
       return;
     }
-    const result = onLoginWithCredentials(existingLogin, existingPassword);
+    setExistingBusy(true);
+    const result = await onLoginWithCredentials(existingLogin, existingPassword);
+    setExistingBusy(false);
     if (!result.ok) {
       setExistingError(result.error ?? 'Nie udało się zalogować.');
     }
@@ -193,8 +190,8 @@ export function FamilyWelcomeGate({
                 ? 'To konto jest chronione hasłem, aby Twoje postępy i ustawienia były bezpieczne.'
                 : 'Możesz ustawić login i hasło lub PIN albo wejść od razu do treningu.'
               : ownedProfiles.length > 0
-              ? 'Widzisz tutaj tylko swoje konta z tego urządzenia. Po wejściu możesz porównywać wyniki z klasą i znajomymi.'
-              : 'Utwórz swoje konto ucznia albo zaloguj się, aby zachować wyniki i rywalizować w swojej klasie lub szkole.'}
+              ? 'Widzisz tutaj tylko swoje konta z tego urządzenia.'
+              : 'Załóż konto z loginem i hasłem albo zaloguj się — wyniki zapiszą się w chmurze i będą na każdym urządzeniu.'}
           </p>
         </div>
 
@@ -471,7 +468,7 @@ export function FamilyWelcomeGate({
                     Nowe konto ucznia / gracza
                   </h2>
                   <p className="text-xs text-[var(--th-text-muted)]">
-                    Zaczynasz od 0 XP i Poziomu 1. Szkoła i klasa pozwolą Ci później rywalizować z kolegami.
+                    Zaczynasz od 0 XP. Twoja nazwa to też login — zapamiętaj ją razem z hasłem, aby zalogować się na innym urządzeniu.
                   </p>
                 </div>
 
@@ -481,7 +478,7 @@ export function FamilyWelcomeGate({
                       htmlFor="welcome-new-name"
                       className="block text-xs font-bold text-[var(--th-text)] mb-1"
                     >
-                      Nazwa użytkownika lub imię *
+                      Login (nazwa gracza) *
                     </label>
                     <input
                       id="welcome-new-name"
@@ -499,7 +496,7 @@ export function FamilyWelcomeGate({
                       htmlFor="welcome-new-password"
                       className="block text-xs font-bold text-[var(--th-text)] mb-1"
                     >
-                      Hasło lub PIN (opcjonalnie)
+                      Hasło lub PIN (min. 4 znaki) *
                     </label>
                     <input
                       id="welcome-new-password"
@@ -508,20 +505,13 @@ export function FamilyWelcomeGate({
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="np. 1234"
                       maxLength={32}
+                      minLength={4}
+                      required
+                      autoComplete="new-password"
                       className="w-full min-h-[42px] px-3 rounded-xl border border-[var(--th-border)] bg-[var(--th-canvas)] text-[var(--th-text)] text-sm font-semibold focus:outline-2 focus:outline-[var(--th-primary)]"
                     />
                   </div>
                 </div>
-
-                <SchoolClassSelector
-                  directory={schoolDirectory}
-                  schoolValue={newSchool}
-                  classValue={newClass}
-                  onChangeSchool={setNewSchool}
-                  onChangeClass={setNewClass}
-                  idPrefix="welcome"
-                  onDuplicateBlockChange={setDuplicateClassBlocked}
-                />
 
                 <div>
                   <span className="block text-xs font-bold text-[var(--th-text)] mb-1">
@@ -562,60 +552,32 @@ export function FamilyWelcomeGate({
 
                 <button
                   type="submit"
-                  disabled={!newName.trim() || duplicateClassBlocked}
+                  disabled={!newName.trim() || createBusy}
                   className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-display font-bold text-sm sm:text-base border-b-4 border-[var(--th-primary-dark)] active:border-b-2 active:translate-y-[2px] disabled:opacity-50 cursor-pointer transition-all"
                 >
-                  Utwórz konto i zacznij trening (0 XP)
+                  {createBusy ? 'Zakładam konto…' : 'Utwórz konto i zacznij trening'}
                 </button>
-
-                <div className="pt-3 border-t border-[var(--th-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  {cloudMeta ? (
-                    <div className="flex items-center gap-2 text-xs font-semibold text-[var(--th-primary)]">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
-                      <span>
-                        Baza online połączona ({cloudMeta.displayName}) — szkoła, klasa i hasło zapiszą się w chmurze.
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-[11px] text-[var(--th-text-muted)] leading-snug">
-                        Chcesz rywalizować z kolegami ze szkoły i zapisać wyniki oraz hasło w chmurze?
-                      </p>
-                      <button
-                        type="button"
-                        onClick={onConnectGoogle}
-                        disabled={cloudStatus === 'connecting'}
-                        data-testid="welcome-create-google-btn"
-                        className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[var(--th-surface-muted)] hover:border-[var(--th-primary)] border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] inline-flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-60"
-                      >
-                        <Cloud className="w-3.5 h-3.5 text-[var(--th-primary)]" aria-hidden="true" />
-                        <span>
-                          {cloudStatus === 'connecting' ? 'Łączenie...' : 'Połącz z Google'}
-                        </span>
-                      </button>
-                    </>
-                  )}
-                </div>
-                {cloudError && !cloudMeta && (
+                {createError && (
                   <p className="text-xs font-bold text-red-500" role="alert">
-                    {cloudError}
+                    {createError}
                   </p>
                 )}
+
               </form>
             )}
 
             {/* Tab C: Existing Account (Google Cloud Sync or Hidden Login + Password) */}
             {activeMode === 'existing' && (
-              <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 space-y-4 shadow-sm">
-                <div className="space-y-2">
+              <div className="bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-4 sm:p-6 flex flex-col-reverse gap-4 shadow-sm">
+                <div className="space-y-2 pt-4 border-t border-[var(--th-border)]">
                   <div className="flex items-center gap-2">
                     <Cloud className="w-5 h-5 text-[var(--th-primary)] shrink-0" aria-hidden="true" />
                     <h2 className="font-display text-base sm:text-lg font-extrabold text-[var(--th-text)]">
-                      Synchronizacja z innego urządzenia (Google)
+                      Albo przez konto Google (opcjonalnie)
                     </h2>
                   </div>
                   <p className="text-xs text-[var(--th-text-muted)]">
-                    Masz już konto na komputerze lub innym telefonie? Zaloguj się przez Google, aby pobrać swoje wyniki, awatar i kolory lub dołączyć do klasy kodem.
+                    Dla rodziców lub osób, które wolą logować się kontem Google.
                   </p>
                   <button
                     type="button"
@@ -638,17 +600,17 @@ export function FamilyWelcomeGate({
                   )}
                 </div>
 
-                {hasGroupAccounts && (
+                {(
                   <form
                     onSubmit={handleExistingLoginSubmit}
-                    className="pt-4 border-t border-[var(--th-border)] space-y-3"
+                    className="space-y-3"
                   >
                     <div>
                       <h3 className="font-display text-sm font-bold text-[var(--th-text)]">
-                        Lub zaloguj się loginem i hasłem na tym urządzeniu
+                        Zaloguj się loginem i hasłem
                       </h3>
                       <p className="text-xs text-[var(--th-text-muted)]">
-                        Wpisz swój login i hasło ustawione wcześniej w tej grupie.
+                        Wpisz login i hasło swojego konta — pobierzemy Twoje wyniki z chmury.
                       </p>
                     </div>
 
@@ -685,9 +647,10 @@ export function FamilyWelcomeGate({
 
                     <button
                       type="submit"
-                      className="w-full min-h-[42px] px-4 rounded-xl bg-[var(--th-surface-muted)] hover:border-[var(--th-primary)] border border-[var(--th-border)] text-xs sm:text-sm font-bold text-[var(--th-text)] cursor-pointer transition-colors"
+                      disabled={existingBusy}
+                      className="w-full min-h-[46px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-display font-bold text-sm border-b-4 border-[var(--th-primary-dark)] cursor-pointer transition-colors disabled:opacity-60"
                     >
-                      Zaloguj loginem i hasłem
+                      {existingBusy ? 'Logowanie…' : 'Zaloguj się'}
                     </button>
                   </form>
                 )}

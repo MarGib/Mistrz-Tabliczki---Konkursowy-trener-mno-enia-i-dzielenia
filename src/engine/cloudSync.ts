@@ -693,10 +693,15 @@ async function upsertArenaBoardPlayers(
   }
 }
 
+const PUBLIC_ARENA_DISABLED = true;
+
 export async function syncProfilesToArenaBoards(
   uid: string,
   profiles: UserProfile[]
 ): Promise<void> {
+  // Wyniki są teraz widoczne wyłącznie w grupach wybranych przez gracza (circles/*),
+  // więc nie publikujemy ich już na ogólnodostępnej tablicy.
+  if (PUBLIC_ARENA_DISABLED) return;
   const realProfiles = profiles.filter((p) => p.id && p.id !== 'guest-preview');
   if (realProfiles.length === 0) return;
 

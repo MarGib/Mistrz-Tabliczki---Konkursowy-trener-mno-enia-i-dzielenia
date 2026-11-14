@@ -310,5 +310,86 @@ service cloud.firestore {
         incoming().updatedAt == request.time;
       allow delete: if false;
     }
+      // 6. Konta login + hasło: pełny profil gracza, widoczny tylko dla właściciela.
+    match /accounts/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create, update: if isSignedIn() && request.auth.uid == uid &&
+        incoming().keys().hasAll(['uid', 'login', 'profile', 'updatedAt']) &&
+        incoming().keys().hasOnly(['uid', 'login', 'profile', 'updatedAt']) &&
+        incoming().uid == uid &&
+        incoming().login is string && incoming().login.size() >= 1 && incoming().login.size() <= 32 &&
+        incoming().profile is map &&
+        incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // 7. Grupy (rodzina, znajomi…) — wyniki widzą tylko członkowie danej grupy.
+    function isCircleMember(circleId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/circles/$(circleId)/members/$(request.auth.uid));
+    }
+
+    function isValidCircleName(name) {
+      return name is string && name.size() >= 1 && name.size() <= 40;
+    }
+
+    match /circleCodes/{code} {
+      allow get: if isSignedIn() && isValidJoinCodeId(code);
+      allow list: if false;
+      allow create: if isSignedIn() && isValidJoinCodeId(code) &&
+        incoming().keys().hasAll(['circleId', 'createdAt']) &&
+        incoming().keys().hasOnly(['circleId', 'createdAt']) &&
+        isValidId(incoming().circleId) &&
+        getAfter(/databases/$(database)/documents/circles/$(incoming().circleId)).data.ownerUid == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/circles/$(incoming().circleId)).data.joinCode == code &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /circles/{circleId} {
+      allow get: if isValidId(circleId) && isCircleMember(circleId);
+      allow list: if false;
+      allow create: if isSignedIn() && isValidId(circleId) &&
+        incoming().keys().hasAll(['name', 'ownerUid', 'joinCode', 'createdAt']) &&
+        incoming().keys().hasOnly(['name', 'ownerUid', 'joinCode', 'createdAt']) &&
+        incoming().ownerUid == request.auth.uid &&
+        isValidCircleName(incoming().name) &&
+        isValidJoinCodeId(incoming().joinCode) &&
+        getAfter(/databases/$(database)/documents/circleCodes/$(incoming().joinCode)).data.circleId == circleId &&
+        incoming().createdAt == request.time;
+      allow update: if isSignedIn() && existing().ownerUid == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name']) &&
+        isValidCircleName(incoming().name);
+      allow delete: if false;
+
+      match /members/{memberUid} {
+        allow get, list: if isCircleMember(circleId);
+        allow create: if isSignedIn() && memberUid == request.auth.uid &&
+          incoming().keys().hasAll(['uid', 'joinCode', 'joinedAt']) &&
+          incoming().keys().hasOnly(['uid', 'joinCode', 'joinedAt']) &&
+          incoming().uid == memberUid &&
+          isValidJoinCodeId(incoming().joinCode) &&
+          getAfter(/databases/$(database)/documents/circleCodes/$(incoming().joinCode)).data.circleId == circleId &&
+          incoming().joinedAt == request.time;
+        allow update: if false;
+        allow delete: if isSignedIn() && memberUid == request.auth.uid;
+      }
+
+      match /players/{playerUid} {
+        allow get, list: if isCircleMember(circleId);
+        allow create, update: if isCircleMember(circleId) && playerUid == request.auth.uid &&
+          incoming().uid == playerUid &&
+          incoming().keys().hasOnly([
+            'uid', 'profileId', 'name', 'avatarId', 'customAvatarSpec', 'xp', 'streakDays',
+            'solvedTasks', 'accuracyPct', 'avgTimeSec', 'sessionsCount', 'tournamentBests',
+            'updatedAtMs', 'updatedAt'
+          ]) &&
+          incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 32 &&
+          incoming().xp is number && incoming().xp >= 0 && incoming().xp <= 10000000 &&
+          incoming().updatedAt == request.time;
+        allow delete: if isSignedIn() && playerUid == request.auth.uid;
+      }
+    }
   }
 }

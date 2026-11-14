@@ -236,6 +236,18 @@ export interface UserProfile {
   settings: AppSettings;
   activeThemeId?: string;
   customThemes?: ColorTheme[];
+  /** Grupy (rodzina, znajomi…), do których należy konto, i czy pokazuje w nich swoje wyniki. */
+  circles?: CircleMembership[];
+  /** uid konta Firebase (login + hasło) — obecny, gdy konto jest zsynchronizowane w chmurze. */
+  cloudUid?: string;
+}
+
+export interface CircleMembership {
+  id: string;
+  name: string;
+  code: string;
+  share: boolean;
+  owner?: boolean;
 }
 
 export type FamilyNotificationType =

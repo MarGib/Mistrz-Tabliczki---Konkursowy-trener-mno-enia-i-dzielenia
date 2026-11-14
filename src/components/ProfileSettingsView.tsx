@@ -32,7 +32,7 @@ import { parseAvatarPrompt } from '../engine/avatarComposer';
 import type { CloudSessionMeta } from '../engine/cloudSync';
 import type { SchoolDirectoryEntry } from '../engine/schoolDirectory';
 import { computeUserLevel } from '../engine/spacedRepetition';
-import type { CloudSyncStatus } from '../store/useAppStore';
+import type { AccountSyncState, CloudSyncStatus } from '../store/useAppStore';
 import type {
   AppSettings,
   AvatarSpec,
@@ -42,9 +42,14 @@ import type {
 } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 import { AvatarStudio } from './AvatarStudio';
-import { SchoolClassSelector } from './SchoolClassSelector';
 
 interface ProfileSettingsViewProps {
+  accountState?: AccountSyncState;
+  onCreateAccount: (
+    name: string,
+    avatarId: string,
+    password: string
+  ) => Promise<{ ok: boolean; error?: string }>;
   ownedProfiles: UserProfile[];
   activeProfile: UserProfile;
   schoolDirectory: SchoolDirectoryEntry[];
@@ -111,6 +116,8 @@ export function ProfileSettingsView({
   cloudError,
   onSwitchProfile,
   onCreateProfile,
+  accountState,
+  onCreateAccount,
   onDeleteProfile,
   onUpdateProfileMeta,
   onSetProfileCredentials,
@@ -197,12 +204,12 @@ export function ProfileSettingsView({
     e.preventDefault();
     setCredError(null);
     const trimmedPwd = passwordEdit.trim();
-    if (trimmedPwd.length > 0 && trimmedPwd.length < 3) {
-      setCredError('Hasło lub PIN musi mieć minimum 3 znaki.');
+    if (trimmedPwd.length > 0 && trimmedPwd.length < 4) {
+      setCredError('Hasło lub PIN musi mieć minimum 4 znaki.');
       return;
     }
-    if (!activeHasPassword && trimmedPwd.length === 0) {
-      setCredError('Wpisz hasło (min. 3 znaki), aby zabezpieczyć to konto.');
+    if (trimmedPwd.length === 0 && (!activeHasPassword || accountState?.state !== 'synced')) {
+      setCredError('Wpisz hasło (min. 4 znaki) — zabezpieczy konto i włączy synchronizację w chmurze.');
       return;
     }
     onSetProfileCredentials(
@@ -213,7 +220,7 @@ export function ProfileSettingsView({
     setPasswordEdit('');
     setCredNotice(
       trimmedPwd
-        ? 'Zapisano login i hasło. Twoje konto jest chronione!'
+        ? 'Zapisano hasło. Łączę konto z chmurą…'
         : 'Zaktualizowano login konta.'
     );
     window.setTimeout(() => setCredNotice(null), 2400);
@@ -239,26 +246,26 @@ export function ProfileSettingsView({
       return;
     }
     setUnlockTargetId(null);
-    setUnlockPwdInput('');
     setUnlockError(null);
-    onSwitchProfile(target.id);
+    // Przełącz i (w tle) wznów synchronizację konta w chmurze.
+    onSetProfileCredentials(target.id, target.login || target.name, unlockPwdInput.trim());
+    setUnlockPwdInput('');
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || newDupBlocked) return;
-    const customSpec = parseAvatarPrompt(
-      newAvatarPrompt.trim() ? newAvatarPrompt.trim() : newName.trim()
-    );
-    onCreateProfile(
-      newName.trim(),
-      'custom',
-      customSpec,
-      normalizeLogin(newName.trim()),
-      newPassword.trim() || undefined,
-      newSchool.trim() || undefined,
-      newClass.trim() || undefined
-    );
+    if (!newName.trim()) return;
+    if (newPassword.trim().length < 4) {
+      setCredError('Nowe konto potrzebuje hasła lub PIN-u (min. 4 znaki).');
+      return;
+    }
+    void onCreateProfile;
+    void parseAvatarPrompt;
+    const res = await onCreateAccount(newName.trim(), 'owl', newPassword.trim());
+    if (!res.ok) {
+      setCredError(res.error ?? 'Nie udało się utworzyć konta.');
+      return;
+    }
     setNewName('');
     setNewSchool('');
     setNewClass('');
@@ -306,10 +313,10 @@ export function ProfileSettingsView({
     <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-8">
       <div>
         <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)]">
-          Konto Użytkownika, Szkoła i Synchronizacja
+          Konto i synchronizacja
         </h1>
         <p className="mt-1 text-xs sm:text-base text-[var(--th-text-muted)]">
-          Zarządzaj swoim kontem, nazwą szkoły i klasy, hasłem, kolorami oraz synchronizacją między telefonem i komputerem.
+          Zarządzaj kontem, hasłem i kolorami. Konto z hasłem synchronizuje się automatycznie między urządzeniami.
         </p>
       </div>
 
@@ -363,29 +370,19 @@ export function ProfileSettingsView({
               />
             </div>
 
-            <SchoolClassSelector
-              directory={schoolDirectory}
-              schoolValue={editSchool}
-              classValue={editClass}
-              onChangeSchool={setEditSchool}
-              onChangeClass={setEditClass}
-              idPrefix="edit-profile"
-              onDuplicateBlockChange={setEditDupBlocked}
-            />
-
             <div className="flex items-center justify-between gap-2">
               {savedNotice ? (
                 <p className="text-xs font-semibold text-[var(--th-primary)]">
-                  Zapisano dane użytkownika, szkoły i klasy.
+                  Zapisano dane gracza.
                 </p>
               ) : (
                 <span className="text-[11px] text-[var(--th-text-muted)]">
-                  Wybierz istniejącą szkołę i klasę lub dodaj nową, aby zbierać punkty drużyny.
+                  Porównuj wyniki w grupach — zakładka Statystyki.
                 </span>
               )}
               <button
                 type="submit"
-                disabled={editDupBlocked}
+                disabled={false}
                 className="min-h-[40px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] border-b-3 border-[var(--th-primary-dark)] text-sm font-bold disabled:opacity-50 cursor-pointer shrink-0"
               >
                 Zapisz dane
@@ -402,7 +399,7 @@ export function ProfileSettingsView({
               <div className="flex items-center gap-1.5">
                 <Cloud className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
                 <h3 className="font-display text-base font-bold text-[var(--th-text)]">
-                  Synchronizacja w chmurze i Grupa / Klasa
+                  Konto Google (opcjonalnie)
                 </h3>
               </div>
               <span className="text-[11px] font-bold text-[var(--th-primary)]">
@@ -594,10 +591,28 @@ export function ProfileSettingsView({
                   <ShieldCheck className="w-4 h-4 text-[var(--th-primary)]" aria-hidden="true" />
                 )}
                 <h3 className="font-display text-base font-bold text-[var(--th-text)]">
-                  Login i hasło (Ochrona wyników)
+                  Login i hasło · synchronizacja
                 </h3>
               </div>
-              {activeHasPassword && (
+              <span
+                data-testid="account-sync-status"
+                className={`text-[11px] font-bold ${
+                  accountState?.state === 'synced'
+                    ? 'text-emerald-600'
+                    : accountState?.state === 'error'
+                    ? 'text-red-500'
+                    : 'text-[var(--th-text-muted)]'
+                }`}
+              >
+                {accountState?.state === 'synced'
+                  ? '☁ Zsynchronizowano'
+                  : accountState?.state === 'syncing'
+                  ? 'Łączenie…'
+                  : accountState?.state === 'error'
+                  ? 'Błąd synchronizacji'
+                  : 'Tylko na tym urządzeniu'}
+              </span>
+              {activeHasPassword && !activeProfile.cloudUid && (
                 <button
                   type="button"
                   onClick={() => {
@@ -652,6 +667,9 @@ export function ProfileSettingsView({
               </div>
             </div>
 
+            {accountState?.message && accountState.state !== 'synced' && (
+              <p className="text-xs font-semibold text-[var(--th-text-muted)]">{accountState.message}</p>
+            )}
             {credError && (
               <p className="text-xs font-bold text-red-500" role="alert">
                 {credError}
@@ -840,7 +858,7 @@ export function ProfileSettingsView({
                       htmlFor="new-profile-password"
                       className="block text-xs font-bold text-[var(--th-text)] mb-1"
                     >
-                      Hasło / PIN (opcjonalnie)
+                      Hasło / PIN (min. 4 znaki)
                     </label>
                     <input
                       id="new-profile-password"
@@ -853,15 +871,6 @@ export function ProfileSettingsView({
                     />
                   </div>
                 </div>
-                <SchoolClassSelector
-                  directory={schoolDirectory}
-                  schoolValue={newSchool}
-                  classValue={newClass}
-                  onChangeSchool={setNewSchool}
-                  onChangeClass={setNewClass}
-                  idPrefix="settings-new"
-                  onDuplicateBlockChange={setNewDupBlocked}
-                />
                 <div>
                   <label
                     htmlFor="new-profile-avatar-prompt"
@@ -882,7 +891,7 @@ export function ProfileSettingsView({
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    disabled={newDupBlocked || !newName.trim()}
+                    disabled={!newName.trim()}
                     className="min-h-[44px] px-4 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] border-b-3 border-[var(--th-primary-dark)] text-sm font-bold inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" aria-hidden="true" />

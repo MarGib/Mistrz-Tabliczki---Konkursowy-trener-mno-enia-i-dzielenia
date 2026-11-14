@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExerciseArena } from './components/ExerciseArena';
+import { GroupsPanel } from './components/GroupsPanel';
 import { FamilyWelcomeGate } from './components/FamilyWelcomeGate';
 import { NotificationCenter } from './components/NotificationCenter';
 import { ProfileSettingsView } from './components/ProfileSettingsView';
@@ -56,6 +57,17 @@ export default function App() {
     disconnectGoogleCloud,
     joinGroupCode,
     resetLocalData,
+    accountSync,
+    loginToCloudAccount,
+    createAccountWithCloud,
+    selectedCircleId,
+    setSelectedCircleId,
+    circles,
+    circleError,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    setGroupShare,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<NavTab>('trening');
@@ -133,6 +145,23 @@ export default function App() {
   const showWelcomeGate =
     (!hasSelectedProfile || ownedProfiles.length === 0) && !activeSeries;
 
+
+  const groupsPanel = (
+    <GroupsPanel
+      circles={circles}
+      selectedCircleId={selectedCircleId}
+      onSelectCircle={setSelectedCircleId}
+      accountState={accountSync[activeProfile.id]}
+      circleError={circleError}
+      membersCount={competitionProfiles.length}
+      onCreateGroup={createGroup}
+      onJoinGroup={joinGroup}
+      onLeaveGroup={leaveGroup}
+      onSetShare={setGroupShare}
+      onOpenAccount={() => handleSelectTab('konto')}
+    />
+  );
+
   return (
     <div
       style={cssVars as React.CSSProperties}
@@ -145,8 +174,6 @@ export default function App() {
       {showWelcomeGate ? (
         <FamilyWelcomeGate
           ownedProfiles={ownedProfiles}
-          hasGroupAccounts={profiles.length > 0}
-          schoolDirectory={schoolDirectory}
           device={device}
           cloudMeta={cloudMeta}
           cloudStatus={cloudStatus}
@@ -159,10 +186,11 @@ export default function App() {
             setProfileCredentials(id, login, pwd);
             window.scrollTo(0, 0);
           }}
-          onLoginWithCredentials={loginWithCredentials}
-          onCreateProfile={(name, avatarId, customSpec, login, password, schoolName, className) => {
-            createProfile(name, avatarId, customSpec, login, password, schoolName, className);
-            window.scrollTo(0, 0);
+          onLoginWithCredentials={loginToCloudAccount}
+          onCreateProfile={async (name, avatarId, password) => {
+            const res = await createAccountWithCloud(name, avatarId, password);
+            if (res.ok) window.scrollTo(0, 0);
+            return res;
           }}
           onConnectGoogle={connectGoogleCloud}
         />
@@ -217,6 +245,8 @@ export default function App() {
                 onOpenTournaments={() => handleSelectTab('turnieje')}
               />
             ) : activeTab === 'turnieje' ? (
+              <>
+              {groupsPanel}
               <TournamentsView
                 profile={activeProfile}
                 profiles={competitionProfiles}
@@ -225,7 +255,10 @@ export default function App() {
                 onConnectGoogle={connectGoogleCloud}
                 onStartTournament={(cfg) => setActiveSeries(cfg)}
               />
+              </>
             ) : activeTab === 'statystyki' ? (
+              <>
+              {groupsPanel}
               <StatsView
                 profile={activeProfile}
                 profiles={competitionProfiles}
@@ -236,6 +269,7 @@ export default function App() {
                 isDark={activeTheme.tokens.isDark}
                 onStartFocusedDrill={(cfg) => setActiveSeries(cfg)}
               />
+              </>
             ) : activeTab === 'szablony' ? (
               <ThemesView
                 activeProfileName={activeProfile.name}
@@ -247,6 +281,8 @@ export default function App() {
               />
             ) : (
               <ProfileSettingsView
+                accountState={accountSync[activeProfile.id]}
+                onCreateAccount={createAccountWithCloud}
                 ownedProfiles={ownedProfiles}
                 activeProfile={activeProfile}
                 schoolDirectory={schoolDirectory}
