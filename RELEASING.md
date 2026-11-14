@@ -58,3 +58,21 @@ Wydania → „Pasek z informacją” — np. zapowiedź przerwy albo nowego tur
 4. Przez kilka dni obserwuj w App Check odsetek „zweryfikowanych” zapytań. Gdy jest blisko 100%: Firestore i Authentication → **Wymuszaj**.
 
 **Ataki na dostępność (DDoS):** stronę serwuje GitHub Pages przez CDN (ochrona po stronie GitHuba). Baza jest na planie Spark, więc nie ma rachunku. W najgorszym razie dzienny limit się wyczerpie, a aplikacja przechodzi wtedy w tryb „wyniki wyślą się później” i gra działa dalej. App Check odcina skrypty spoza aplikacji.
+
+## Kopia zapasowa bazy
+
+**Ręcznie (działa od razu):** panel → **Baza** → „Pobierz kopię (JSON)”. Gdy minie tydzień od ostatniej kopii, na „Przeglądzie” pojawia się przypomnienie. Plik trzymaj w prywatnym miejscu.
+
+**Automatycznie co tydzień (GitHub Actions, `.github/workflows/backup.yml`):** kopia jest szyfrowana, bo repozytorium jest publiczne, i trzymana 90 dni jako artefakt przebiegu. Włączenie (raz, ok. 5 min, robi to właściciel, bo to klucze):
+1. Firebase → ⚙️ Ustawienia projektu → **Konta usługi** → „Wygeneruj nowy klucz prywatny” (plik JSON).
+2. GitHub → repozytorium → Settings → Secrets and variables → Actions → **New repository secret**:
+   - `FIREBASE_SERVICE_ACCOUNT`: cała zawartość pliku JSON z kroku 1,
+   - `BACKUP_PASSPHRASE`: długie hasło do szyfrowania kopii (zapisz je w menedżerze haseł).
+3. Usuń plik JSON z dysku. Sprawdzenie: Actions → „Kopia zapasowa bazy” → Run workflow.
+
+Bez sekretów workflow kończy się z informacją „kopia pominięta”, bez błędu.
+
+**Odszyfrowanie:** pobierz artefakt „kopia-bazy”, rozpakuj zip, potem:
+`openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in kopia-RRRR-MM-DD.json.gz.enc -out kopia.json.gz && gunzip kopia.json.gz`
+
+**Odtworzenie:** dokumenty są w `data[kolekcja][ścieżka]`, a daty jako `{"__time": ms}`. Odtwarzamy skryptem (`firebase-admin`, `set` każdego dokumentu). Konta logowania (`authUsers`) zakłada się na nowo, a gracze logują się swoim loginem i hasłem.

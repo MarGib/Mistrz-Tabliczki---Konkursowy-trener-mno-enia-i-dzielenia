@@ -1,0 +1,57 @@
+name: Kopia zapasowa bazy
+
+# Co tydzień w niedzielę o 3:17 (czasu UTC) i na żądanie (Actions → Kopia zapasowa bazy → Run workflow).
+# Kopia jest SZYFROWANA (repozytorium jest publiczne) i przechowywana 90 dni jako artefakt.
+# Wymaga sekretów repozytorium: FIREBASE_SERVICE_ACCOUNT i BACKUP_PASSPHRASE (instrukcja: RELEASING.md).
+on:
+  schedule:
+    - cron: '17 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sprawdź sekrety
+        id: check
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$SA" ] || [ -z "$PASS" ]; then
+            echo "Brak sekretów FIREBASE_SERVICE_ACCOUNT / BACKUP_PASSPHRASE — kopia pominięta (instrukcja w RELEASING.md)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ok == 'true'
+        with:
+          node-version: 22
+      - name: Pobierz bazę
+        if: steps.check.outputs.ok == 'true'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          mkdir -p /tmp/bk && cp tools/backup.mjs /tmp/bk/ && cd /tmp/bk
+          npm init -y >/dev/null && npm install --no-audit --no-fund firebase-admin@13 >/dev/null
+          node backup.mjs
+      - name: Zaszyfruj
+        if: steps.check.outputs.ok == 'true'
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          cd /tmp/bk
+          gzip -9 backup.json
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in backup.json.gz -out "kopia-$(date +%F).json.gz.enc" -pass env:BACKUP_PASSPHRASE
+          rm backup.json.gz
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.ok == 'true'
+        with:
+          name: kopia-bazy
+          path: /tmp/bk/*.enc
+          retention-days: 90

@@ -523,3 +523,102 @@ export async function decideReview(
     await setDoc(ref, { uid, login: '', events: [], device: '', createdAt: serverTimestamp(), ...payload });
   }
 }
+
+/* ------------------------------ Kopia zapasowa ------------------------------ */
+
+const TOP_COLLECTIONS = [
+  'logins',
+  'accounts',
+  'reviews',
+  'circles',
+  'circleCodes',
+  'devices',
+  'loginEvents',
+  'appErrors',
+  'helpRequests',
+  'config',
+] as const;
+
+function plain(v: unknown): unknown {
+  if (v && typeof v === 'object') {
+    if (typeof (v as Timestamp).toMillis === 'function') return { __time: (v as Timestamp).toMillis() };
+    if (Array.isArray(v)) return v.map(plain);
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, plain(x)]));
+  }
+  return v;
+}
+
+export interface BackupFile {
+  kind: 'mistrz-tabliczki-backup';
+  createdAt: string;
+  appVersion: string;
+  counts: Record<string, number>;
+  data: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Pełna kopia bazy (bez haseł — w bazie są tylko ich skróty w profilach na urządzeniach, nie w chmurze).
+ * Zbiera kolekcje główne oraz podkolekcje: historię serii kont i członków/karty grup.
+ */
+export async function exportDatabase(onProgress?: (msg: string) => void): Promise<BackupFile> {
+  const { db } = getAdminHandle();
+  const data: Record<string, Record<string, unknown>> = {};
+  const counts: Record<string, number> = {};
+  const put = (path: string, id: string, value: unknown) => {
+    (data[path] ??= {})[id] = plain(value);
+    counts[path] = (counts[path] ?? 0) + 1;
+  };
+  for (const name of TOP_COLLECTIONS) {
+    onProgress?.(`Pobieram: ${name}…`);
+    const snap = await getDocs(collection(db, name)).catch(() => null);
+    snap?.forEach((d) => put(name, d.id, d.data()));
+  }
+  const accountIds = Object.keys(data.accounts ?? {});
+  for (const [i, uid] of accountIds.entries()) {
+    onProgress?.(`Historia serii: konto ${i + 1} z ${accountIds.length}…`);
+    const snap = await getDocs(collection(db, 'accounts', uid, 'history')).catch(() => null);
+    snap?.forEach((d) => put('accounts/*/history', `${uid}/${d.id}`, d.data()));
+  }
+  for (const circleId of Object.keys(data.circles ?? {})) {
+    onProgress?.(`Grupa ${circleId}…`);
+    for (const sub of ['members', 'players'] as const) {
+      const snap = await getDocs(collection(db, 'circles', circleId, sub)).catch(() => null);
+      snap?.forEach((d) => put(`circles/*/${sub}`, `${circleId}/${d.id}`, d.data()));
+    }
+  }
+  return {
+    kind: 'mistrz-tabliczki-backup',
+    createdAt: new Date().toISOString(),
+    appVersion: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '',
+    counts,
+    data,
+  };
+}
+
+/** Pobranie kopii jako plik JSON na urządzenie administratora. */
+export function downloadBackup(file: BackupFile): void {
+  const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mistrz-tabliczki-kopia-${file.createdAt.slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+const BACKUP_KEY = 'mt_admin_last_backup';
+export function lastBackupAt(): number {
+  try {
+    return Number(window.localStorage.getItem(BACKUP_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+export function noteBackupDone(): void {
+  try {
+    window.localStorage.setItem(BACKUP_KEY, String(Date.now()));
+  } catch {
+    // ignore
+  }
+}

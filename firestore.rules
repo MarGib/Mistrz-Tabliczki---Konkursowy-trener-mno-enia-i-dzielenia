@@ -203,7 +203,7 @@ service cloud.firestore {
 
     match /circleCodes/{code} {
       allow get: if isSignedIn() && isValidJoinCodeId(code);
-      allow list: if false;
+      allow list: if isAdmin();
       allow create: if isSignedIn() && isValidJoinCodeId(code) &&
         incoming().keys().hasAll(['circleId', 'createdAt']) &&
         incoming().keys().hasOnly(['circleId', 'createdAt']) &&
@@ -215,8 +215,8 @@ service cloud.firestore {
     }
 
     match /circles/{circleId} {
-      allow get: if isValidId(circleId) && isCircleMember(circleId);
-      allow list: if false;
+      allow get: if (isValidId(circleId) && isCircleMember(circleId)) || isAdmin();
+      allow list: if isAdmin();
       allow create: if isSignedIn() && isValidId(circleId) &&
         incoming().keys().hasAll(['name', 'ownerUid', 'joinCode', 'createdAt']) &&
         incoming().keys().hasOnly(['name', 'ownerUid', 'joinCode', 'createdAt']) &&
@@ -231,7 +231,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /members/{memberUid} {
-        allow get, list: if isCircleMember(circleId);
+        allow get, list: if isCircleMember(circleId) || isAdmin();
         allow create: if isSignedIn() && memberUid == request.auth.uid &&
           incoming().keys().hasAll(['uid', 'joinCode', 'joinedAt']) &&
           incoming().keys().hasOnly(['uid', 'joinCode', 'joinedAt']) &&
@@ -244,7 +244,7 @@ service cloud.firestore {
       }
 
       match /players/{playerUid} {
-        allow get, list: if isCircleMember(circleId);
+        allow get, list: if isCircleMember(circleId) || isAdmin();
         allow create, update: if isCircleMember(circleId) && playerUid == request.auth.uid &&
           incoming().uid == playerUid &&
           incoming().keys().hasOnly([

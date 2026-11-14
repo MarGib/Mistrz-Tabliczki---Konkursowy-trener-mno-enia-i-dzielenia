@@ -45,6 +45,7 @@ import { type AppStatus } from '../engine/appStatus';
 import { normalizeLogin } from '../engine/accountSecurity';
 import { RELEASES } from '../data/changelog';
 import { AdminFairPlay, fairPlayFindings } from './AdminFairPlay';
+import { AdminBackup } from './AdminBackup';
 
 export interface AdminDemoData {
   accounts: AdminAccountRow[];
@@ -469,6 +470,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
 
             {tab === 'przeglad' && (
               <div className="space-y-4">
+                {!demo && <AdminBackup compact />}
                 <div className="space-y-2">
                   {health.map((h, i) => (
                     <div key={i} className={`rounded-2xl border px-3 py-2 text-sm font-semibold ${LEVEL_STYLE[h.level]}`}>
@@ -561,6 +563,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
 
             {tab === 'baza' && (
               <div className="space-y-3">
+                <AdminBackup demo={Boolean(demo)} />
                 {!tokenOk && !usage && (
                   <div className={`${card} space-y-2`}>
                     <p className="text-sm">Zużycie bazy pobieramy z Google Cloud — potrzebne świeże logowanie Google.</p>
