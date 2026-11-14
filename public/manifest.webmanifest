@@ -1,0 +1,17 @@
+{
+  "name": "Mistrz Tabliczki — trener mnożenia i dzielenia",
+  "short_name": "Mistrz Tabliczki",
+  "description": "Trening mnożenia i dzielenia z grupami rodziny i znajomych.",
+  "lang": "pl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F7F9FC",
+  "theme_color": "#16a34a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
