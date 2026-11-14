@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { WeeklyReportCard } from './WeeklyReportCard';
 import { HelpButton } from '../help/HelpButton';
 import {
   Brain,
@@ -151,6 +152,8 @@ export function StatsView({
           </button>
         )}
       </div>
+
+      <WeeklyReportCard profile={profile} />
 
       {cloudStatus !== 'synced' && onConnectGoogle && (
         <div className="bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">

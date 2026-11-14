@@ -300,6 +300,8 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: 'Co pokazują statystyki?',
     lead: 'Zakładka Statystyki pokazuje wyniki wybranej grupy (albo kont z tego urządzenia).',
     steps: [
+      'Na górze „Raport tygodnia” dla rodzica: dni z treningiem, serie, poprawność i tempo w porównaniu z poprzednim tygodniem, kropki na ścieżce i działania do powtórki. Przycisk „Wyślij raport” wysyła go jako tekst (SMS, komunikator) albo kopiuje.',
+      'Pod raportem cała historia: wszystkie serie od pierwszego dnia — także te zagrane na innych urządzeniach.',
       'Tabela wyników: ranking osób w grupie — XP, celność, tempo. Aktualizuje się na żywo, gdy ktoś skończy serię.',
       'Kafelki grupy: łączne punkty i lider, zadania rozwiązane razem, średnia celność i średnie tempo grupy.',
       'Tendencja szybkości i skuteczności: wykres ostatnich serii każdej osoby. Niższa linia tempa = szybsze odpowiedzi.',
