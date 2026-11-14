@@ -50,6 +50,7 @@ import { WhatsNewDialog } from './WhatsNewDialog';
 import { HowWePlayDialog } from './HowWePlayDialog';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { AvatarStudio } from './AvatarStudio';
+import { useFullHistory } from '../engine/useHistory';
 
 interface ProfileSettingsViewProps {
   accountState?: AccountSyncState;
@@ -196,6 +197,7 @@ export function ProfileSettingsView({
   ]);
 
   const levelInfo = computeUserLevel(activeProfile.xp);
+  const historyCount = useFullHistory(activeProfile).length;
   const activeHasPassword = hasAccountPassword(activeProfile);
 
   const handleSaveProfileDetails = (e: React.FormEvent) => {
@@ -345,7 +347,7 @@ export function ProfileSettingsView({
               </h2>
               <p className="text-xs text-[var(--th-text-muted)] tabular-nums">
                 {activeProfile.xp} XP · Seria {activeProfile.streakDays} dni ·{' '}
-                {activeProfile.sessions.length} ukończonych serii
+                {historyCount} ukończonych serii
               </p>
             </div>
             <div className="flex flex-col items-center gap-2 shrink-0">

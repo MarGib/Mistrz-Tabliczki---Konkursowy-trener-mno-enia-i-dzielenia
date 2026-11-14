@@ -1,6 +1,7 @@
 import { Award, ChevronRight } from 'lucide-react';
 import { HelpButton } from '../help/HelpButton';
 import { useMemo, useState } from 'react';
+import { useFullSessions } from '../engine/useHistory';
 import { LEVEL_STAGES, TOURNAMENTS } from '../data/curriculum';
 import type { CertificateData } from '../engine/certificateCanvas';
 import type { UserProfile } from '../types/math';
@@ -22,10 +23,12 @@ const MEDAL_NAME: Record<string, string> = {
 /** Lista zdobytych certyfikatów — każdy można otworzyć, wydrukować i udostępnić ponownie. */
 export function MyCertificates({ profile, primaryColor, accentColor }: MyCertificatesProps) {
   const [open, setOpen] = useState<CertificateData | null>(null);
+  // Pełna historia: certyfikat sprzed wielu miesięcy nadal ma swoje wyniki.
+  const allSessions = useFullSessions(profile);
 
   const certs = useMemo<CertificateData[]>(() => {
     const list: CertificateData[] = [];
-    const sessions = profile.sessions ?? [];
+    const sessions = allSessions;
     for (const t of TOURNAMENTS) {
       const best = profile.tournamentBests?.[t.id];
       if (!best || best.medal === 'brak') continue;

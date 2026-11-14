@@ -8,6 +8,14 @@ function lessonConfigFor(id: string) {
 }
 import { deviceHeartbeat } from '../engine/telemetry';
 import {
+  archiveSessions,
+  historyNeedsFetch,
+  markHistoryFlushed,
+  mergeFetchedHistory,
+  pendingHistory,
+  shouldFlushHistory,
+} from '../engine/history';
+import {
   canCreateAccountHere,
   clearLoginFailures,
   loginLockLeftMs,
@@ -71,6 +79,8 @@ import {
   leaveCircle,
   publishCircleCards,
   pushAccountProfile,
+  pushHistory,
+  fetchHistory,
   registerOrSignInAccount,
   ensureAccount,
   ensureCircleMembership,
@@ -322,6 +332,9 @@ type LinkResult = 'synced' | 'needs-password' | 'error' | 'skip';
 export function useAppStore() {
   const [store, setStore] = useState<StoreState>(loadInitialStore);
   const storeRef = useRef<StoreState>(store);
+  // Wyślij zaległe zmiany od razu (aplikacja się chowa).
+  const flushNowRef = useRef(false);
+  const historyBusyRef = useRef<Set<string>>(new Set());
   // Uczciwa gra: zgłoszenie podejrzanej serii (ustawiane niżej, gdy są już potrzebne funkcje).
   const reportIntegrityRef = useRef<(profileId: string, level: 'watch' | 'pending', events: ReviewEvent[]) => void>(
     () => {}
@@ -1016,6 +1029,7 @@ export function useAppStore() {
           notifications: nextNotifications,
         };
       });
+      archiveSessions(storeRef.current.activeProfileId, [session]);
       if (session.integrity) {
         const pid = storeRef.current.activeProfileId;
         const it = session.integrity;
@@ -1480,6 +1494,11 @@ export function useAppStore() {
     };
     const onVisible = () => {
       if (document.visibilityState === 'visible') onOnline();
+      else {
+        // Aplikacja się chowa (zmiana karty, zamknięcie, ekran blokady) — wyślij wszystko od razu.
+        flushNowRef.current = true;
+        setPushTick((t) => t + 1);
+      }
     };
     window.addEventListener('online', onOnline);
     document.addEventListener('visibilitychange', onVisible);
@@ -1516,11 +1535,15 @@ export function useAppStore() {
     };
   }, [ownedCloudKey, setSyncFor]);
 
-  // Wysyłanie zmian (wyniki, ustawienia, grupy) do chmury — oszczędnie:
-  //  * najwyżej jeden zapis konta na 5 s (kolejne zmiany są łączone),
-  //  * karta wyników w grupach tylko, gdy zmieniły się wyniki lub widoczność,
-  //  * bezpiecznik: >20 zapisów jednego konta w 10 min = wstrzymanie (ochrona dziennego limitu bazy).
+  // Wysyłanie zmian (wyniki, ustawienia, grupy) do chmury — oszczędnie (darmowy limit zapisów):
+  //  * konto: gdy przez 20 s nic się nie zmienia (kilka serii pod rząd = 1 zapis), najpóźniej po 2 min,
+  //    a od razu, gdy aplikacja się chowa,
+  //  * karty wyników w grupach: najwyżej co 3 min (albo przy chowaniu aplikacji),
+  //  * historia serii: paczkami po 10 serii / przy chowaniu aplikacji (1 zapis na miesiąc w paczce).
+  // Wszystko i tak jest najpierw zapisane na urządzeniu, więc nic nie ginie.
   const lastPushAtRef = useRef<Map<string, number>>(new Map());
+  const changeSeenRef = useRef<Map<string, { fp: string; at: number; since: number }>>(new Map());
+  const lastCardsAtRef = useRef<Map<string, number>>(new Map());
   const pushFailuresRef = useRef<Map<string, number>>(new Map());
   const pushLogRef = useRef<Map<string, number[]>>(new Map());
   useEffect(() => {
@@ -1542,12 +1565,24 @@ export function useAppStore() {
           continue;
         }
         const log = (pushLogRef.current.get(p.id) ?? []).filter((t) => now - t < 10 * 60_000);
+        // Grupowanie: czekamy, aż zmiany się uspokoją (20 s), ale nie dłużej niż 2 min.
+        const seen = changeSeenRef.current.get(p.id);
+        const change = seen && seen.fp === fp ? seen : { fp, at: now, since: seen?.since ?? now };
+        changeSeenRef.current.set(p.id, change);
+        const quiet = now - change.at;
+        const waited = now - change.since;
+        const flushNow = flushNowRef.current;
         const minGap = log.length >= 20 ? 60_000 : 5000;
         const last = lastPushAtRef.current.get(p.id) ?? 0;
-        if (now - last < minGap) {
+        if (!flushNow && (quiet < 20_000 && waited < 120_000)) {
+          retryIn = Math.max(retryIn, Math.min(20_000 - quiet, 120_000 - waited) + 100);
+          continue;
+        }
+        if (!flushNow && now - last < minGap) {
           retryIn = Math.max(retryIn, minGap - (now - last));
           continue;
         }
+        changeSeenRef.current.delete(p.id);
         log.push(now);
         pushLogRef.current.set(p.id, log);
         lastPushAtRef.current.set(p.id, now);
@@ -1596,13 +1631,36 @@ export function useAppStore() {
           p.review?.state ?? '',
         ].join('|');
         if (cardFpRef.current.get(p.id) !== cardFp) {
-          cardFpRef.current.set(p.id, cardFp);
-          void publishCircleCards(p).catch((err) => {
-            cardFpRef.current.delete(p.id);
-            noteDbError(err);
-          });
+          const lastCards = lastCardsAtRef.current.get(p.id) ?? 0;
+          if (flushNowRef.current || now - lastCards >= 180_000) {
+            cardFpRef.current.set(p.id, cardFp);
+            lastCardsAtRef.current.set(p.id, now);
+            void publishCircleCards(p).catch((err) => {
+              cardFpRef.current.delete(p.id);
+              noteDbError(err);
+            });
+          } else {
+            retryIn = Math.max(retryIn, 180_000 - (now - lastCards) + 100);
+          }
         }
       }
+      // Historia serii — paczkami.
+      for (const p of store.profiles) {
+        if (!p.cloudUid || !store.ownedProfileIds.includes(p.id) || p.cloudOptOut) continue;
+        if (accountSync[p.id]?.state !== 'synced' || p.review?.state === 'suspended') continue;
+        if (dbPauseUntilRef.current > now || historyBusyRef.current.has(p.id)) continue;
+        if (!shouldFlushHistory(p.id, flushNowRef.current, now)) continue;
+        const batch = pendingHistory(p.id).slice(0, 200);
+        const pid = p.id;
+        historyBusyRef.current.add(pid);
+        void pushHistory(profileLogin(p), batch)
+          .then((ok) => {
+            if (ok) markHistoryFlushed(pid, batch);
+          })
+          .catch((err) => noteDbError(err))
+          .finally(() => historyBusyRef.current.delete(pid));
+      }
+      flushNowRef.current = false;
       if (retryIn > 0) window.setTimeout(() => setPushTick((t) => t + 1), retryIn + 50);
     }, 1500);
     return () => window.clearTimeout(timer);
@@ -1840,6 +1898,35 @@ export function useAppStore() {
 
   loginToCloudAccountRef.current = loginToCloudAccount;
 
+  /* ============================== Pełna historia serii ============================== */
+  // Dotychczasowe serie trafiają do archiwum (bez powtórek), a na nowym urządzeniu
+  // pobieramy całą historię z chmury — raz, po połączeniu konta.
+  const historyKey = (() => {
+    const p = store.profiles.find((x) => x.id === store.activeProfileId);
+    return p && p.cloudUid && !p.cloudOptOut && accountSync[p.id]?.state === 'synced' ? `${p.id}|${profileLogin(p)}` : '';
+  })();
+  useEffect(() => {
+    const p = storeRef.current.profiles.find((x) => x.id === storeRef.current.activeProfileId);
+    if (p) archiveSessions(p.id, p.sessions ?? []);
+  }, [store.activeProfileId]);
+  useEffect(() => {
+    if (!historyKey) return;
+    const [pid, login] = historyKey.split('|');
+    if (!historyNeedsFetch(pid)) return;
+    let stop = false;
+    const t = window.setTimeout(() => {
+      void fetchHistory(login)
+        .then((items) => {
+          if (!stop && items) mergeFetchedHistory(pid, items);
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => {
+      stop = true;
+      window.clearTimeout(t);
+    };
+  }, [historyKey]);
+
   /* ============================== Uczciwa gra ============================== */
   const applyReview = useCallback((profileId: string, r: AccountReview | null) => {
     const state = r?.state ?? 'cleared';
@@ -1901,8 +1988,14 @@ export function useAppStore() {
       const p = storeRef.current.profiles.find((x) => x.id === profileId);
       if (!p) return;
       if (p.cloudUid) {
-        // Wyślij ostatnie zmiany przed wylogowaniem.
+        // Wyślij ostatnie zmiany (i zaległą historię serii) przed wylogowaniem.
         await pushAccountProfile(p).catch(() => {});
+        const pend = pendingHistory(p.id);
+        if (pend.length > 0) {
+          await pushHistory(profileLogin(p), pend)
+            .then((ok) => ok && markHistoryFlushed(p.id, pend))
+            .catch(() => {});
+        }
         await signOutAccount(profileLogin(p)).catch(() => {});
       }
       setStore((prev) => {

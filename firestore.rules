@@ -177,6 +177,18 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         reviewState(uid) != 'suspended';
       allow delete: if isSignedIn() && request.auth.uid == uid;
+
+      // Pełna historia serii: jeden dokument na miesiąc (krótkie podsumowania, bez zadań).
+      match /history/{month} {
+        allow get, list: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+        allow create, update: if isSignedIn() && request.auth.uid == uid &&
+          month.matches('^[0-9]{4}-[0-9]{2}$') &&
+          incoming().keys().hasOnly(['items', 'updatedAt']) &&
+          incoming().items is list && incoming().items.size() <= 3000 &&
+          incoming().updatedAt == request.time &&
+          reviewState(uid) != 'suspended';
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
     }
 
     // 7. Grupy (rodzina, znajomi…) — wyniki widzą tylko członkowie danej grupy.

@@ -27,7 +27,9 @@ import {
   type Firestore,
   type Unsubscribe,
   addDoc,
+  arrayUnion,
   collection,
+  getDocs,
   deleteDoc,
   doc,
   getDoc,
@@ -45,6 +47,7 @@ import { protectApp } from './appCheck';
 import legacyConfig from '../../firebase-applet-config.json';
 import type { CircleMembership, UserProfile } from '../types/math';
 import { hashAccountPassword, normalizeLogin } from './accountSecurity';
+import { type SessionLite, groupByMonth } from './history';
 import {
   type ArenaPlayerCard,
   profileToArenaPlayerCard,
@@ -682,4 +685,38 @@ export async function reportAccountReview(
     });
   }
   return { state, trusted: false };
+}
+
+/* ------------------------------ Pełna historia serii ------------------------------ */
+
+/** Wysyła paczkę skrótów serii: jeden zapis na każdy miesiąc w paczce (zwykle 1). */
+export async function pushHistory(login: string, items: SessionLite[]): Promise<boolean> {
+  if (items.length === 0) return true;
+  const { auth, db } = getHandle(normalizeLogin(login));
+  const uid = auth.currentUser?.uid;
+  if (!uid) return false;
+  const batch = writeBatch(db);
+  for (const [month, list] of groupByMonth(items)) {
+    batch.set(
+      doc(db, 'accounts', uid, 'history', month),
+      { items: arrayUnion(...list.map((s) => stripUndefinedDeep(s))), updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }
+  await batch.commit();
+  return true;
+}
+
+/** Cała historia z chmury (nowe urządzenie): 1 odczyt na miesiąc gry. */
+export async function fetchHistory(login: string): Promise<SessionLite[] | null> {
+  const { auth, db } = getHandle(normalizeLogin(login));
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+  const snap = await getDocs(collection(db, 'accounts', uid, 'history'));
+  const out: SessionLite[] = [];
+  snap.forEach((d) => {
+    const items = d.data().items;
+    if (Array.isArray(items)) out.push(...(items as SessionLite[]));
+  });
+  return out;
 }
