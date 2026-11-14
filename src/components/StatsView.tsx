@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import {
   Brain,
   CalendarDays,
@@ -474,6 +475,7 @@ export function StatsView({
         <section className="lg:col-span-7 bg-[var(--th-surface)] border border-[var(--th-border)] rounded-3xl p-5 sm:p-6">
           <h2 className="font-display text-lg font-bold text-[var(--th-text)]">
             Tendencja szybkości i skuteczności graczy
+            <HelpButton section="stats" label="Statystyki" className="align-middle ml-1" />
           </h2>
           <p className="text-sm text-[var(--th-text-muted)] mb-4">
             Porównuj średni czas odpowiedzi w kolejnych seriach dla użytkowników z grupy.

@@ -21,6 +21,7 @@ import { getUnreadNotificationsForProfile } from './engine/familyNotifications';
 import { themeToCssVariables } from './engine/themeEngine';
 import { useAppStore } from './store/useAppStore';
 import { AdminPanel } from './components/AdminPanel';
+import { GuidedTour } from './help/GuidedTour';
 import { MyCertificates } from './components/MyCertificates';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
 
@@ -198,6 +199,14 @@ export default function App() {
       data-theme-dark={activeTheme.tokens.isDark ? 'true' : 'false'}
     >
       {adminOpen && <AdminPanel onClose={closeAdmin} />}
+      {activeProfile && !showWelcomeGate && (
+        <GuidedTour
+          profileId={activeProfile.id}
+          autoStart={(activeProfile.sessions?.length ?? 0) < 3}
+          enabled={!activeSeries && !adminOpen}
+          onSelectTab={setActiveTab}
+        />
+      )}
       {showWelcomeGate ? (
         <FamilyWelcomeGate
           ownedProfiles={ownedProfiles}

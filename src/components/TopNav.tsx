@@ -1,5 +1,5 @@
 import { BarChart3, Bell, Flame, Home, Palette, Trophy, User } from 'lucide-react';
-import { HelpButton } from '../help/HelpButton';
+import { HeaderHelpButton } from '../help/HeaderHelpButton';
 import type { DeviceProfile } from '../types/math';
 
 export type NavTab = 'trening' | 'turnieje' | 'statystyki' | 'szablony' | 'konto';
@@ -66,6 +66,7 @@ export function TopNav({
                 <button
                   key={item.id}
                   type="button"
+                  data-tour={`nav-${item.id}`}
                   onClick={() => onSelectTab(item.id)}
                   aria-current={isActive ? 'page' : undefined}
                   className={`py-1.5 border-b-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--th-primary)] ${
@@ -93,7 +94,7 @@ export function TopNav({
               <span className="truncate max-w-[54px] text-[var(--th-text)]">{userName}</span>
             </div>
 
-            <HelpButton section="start" label="Pomoc" />
+            <HeaderHelpButton />
             <button
               type="button"
               onClick={onOpenNotifications}
@@ -118,6 +119,7 @@ export function TopNav({
 
             <button
               type="button"
+              data-tour="quickstart"
               onClick={onQuickStart}
               className="hidden md:inline-flex items-center justify-center px-4 py-2 text-sm font-bold text-[var(--th-primary-fg)] bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] active:translate-y-[1px] border-b-3 border-[var(--th-primary-dark)] rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--th-primary)]"
             >
@@ -145,6 +147,7 @@ export function TopNav({
               <button
                 key={item.id}
                 type="button"
+                data-tour={`nav-${item.id}`}
                 onClick={() => onSelectTab(item.id)}
                 aria-current={isActive ? 'page' : undefined}
                 className="group flex flex-col items-center justify-center gap-1 min-h-[44px] cursor-pointer focus-visible:outline-none"

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import { Award, Clock, Cloud, Medal, Play, Target, Trophy } from 'lucide-react';
 import trophyImg from '../assets/images/trophy_contest_cup_1794652990997.jpg';
 import { TOURNAMENTS } from '../data/curriculum';
@@ -111,6 +112,7 @@ export function TournamentsView({
           </p>
           <h1 className="mt-1 font-display text-2xl sm:text-3xl font-extrabold text-[var(--th-text)]">
             Turnieje Konkursowe i Rozgrywki na Czas
+            <HelpButton section="tournaments" label="Turnieje" className="align-middle ml-1" />
           </h1>
           <p className="mt-1.5 text-sm sm:text-base text-[var(--th-text-muted)] max-w-2xl">
             Rywalizuj z rodziną i znajomymi z wybranej grupy w warunkach prawdziwego konkursu matematycznego. Zdobądź Brąz, Srebro, Złoto lub Puchar Mistrza!

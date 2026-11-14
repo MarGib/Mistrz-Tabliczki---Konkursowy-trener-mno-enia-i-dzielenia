@@ -1,4 +1,5 @@
 import { ChevronRight, Crosshair, Gauge, Hash, Infinity as InfinityIcon, Sparkles } from 'lucide-react';
+import { HelpButton } from '../help/HelpButton';
 import { useMemo } from 'react';
 import { buildMasterChallenge } from '../engine/masterChallenge';
 import type { ActiveSeriesConfig, UserProfile } from '../types/math';
@@ -32,6 +33,11 @@ export function MasterChallengeCard({ profile, pathDone, onStart }: MasterChalle
           <p className="text-[11px] font-bold uppercase tracking-wider opacity-85 inline-flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
             {pathDone ? 'Ścieżka ukończona — gramy dalej!' : 'Bez końca · dopasowane do Ciebie'}
+            <HelpButton
+              section="master"
+              label="Wyzwanie Mistrza"
+              className="!min-w-[28px] !min-h-[28px] -my-1 !text-white/85 hover:!text-white"
+            />
           </p>
           <h3 className="mt-1 font-display text-xl sm:text-2xl font-extrabold">
             Wyzwanie Mistrza — poziom {ch.level}

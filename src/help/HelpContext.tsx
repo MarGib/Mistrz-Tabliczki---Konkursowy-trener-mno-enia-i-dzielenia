@@ -39,6 +39,12 @@ export function HelpProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const openHelp = useCallback((id: HelpSectionId = 'start') => {
+    try {
+      window.localStorage.setItem('mt_help_opened', '1');
+    } catch {
+      // ignore
+    }
+    window.dispatchEvent(new CustomEvent('mt:help-opened'));
     savedScrollRef.current = window.scrollY;
     if (!pushedRef.current) {
       try {

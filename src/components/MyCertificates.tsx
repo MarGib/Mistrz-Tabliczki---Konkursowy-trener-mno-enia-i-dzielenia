@@ -1,4 +1,5 @@
 import { Award, ChevronRight } from 'lucide-react';
+import { HelpButton } from '../help/HelpButton';
 import { useMemo, useState } from 'react';
 import { LEVEL_STAGES, TOURNAMENTS } from '../data/curriculum';
 import type { CertificateData } from '../engine/certificateCanvas';
@@ -84,6 +85,7 @@ export function MyCertificates({ profile, primaryColor, accentColor }: MyCertifi
       <div className="flex items-center gap-2">
         <Award className="w-5 h-5 text-amber-500" aria-hidden="true" />
         <h2 className="font-display text-lg font-bold text-[var(--th-text)]">Moje certyfikaty ({certs.length})</h2>
+        <HelpButton section="certificates" label="Certyfikaty" />
       </div>
       {certs.length === 0 ? (
         <p className="text-sm text-[var(--th-text-muted)]">

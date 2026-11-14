@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import {
   AlarmClock,
   Bell,
@@ -352,6 +353,7 @@ export function TrainingHome({
           {/* Primary Launch Actions */}
           <div className="mt-4 sm:mt-6 pt-4 border-t border-[var(--th-border)] flex flex-col sm:flex-row gap-2.5 sm:gap-3">
             <button
+                data-tour="quickstart"
               type="button"
               onClick={handleQuickCustomStart}
               className="flex-1 min-h-[48px] sm:min-h-[52px] px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-display text-base sm:text-lg font-bold border-b-4 border-[var(--th-primary-dark)] active:border-b-2 active:translate-y-[2px] transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -732,7 +734,7 @@ export function TrainingHome({
       </section>
 
       {/* Ścieżka Mistrza (Progressive Levels with Passing Thresholds) */}
-      <section aria-labelledby="levels-heading">
+      <section aria-labelledby="levels-heading" data-tour="path">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-4">
           <div>
             <h2
@@ -740,6 +742,7 @@ export function TrainingHome({
               className="font-display text-xl sm:text-2xl font-extrabold text-[var(--th-text)]"
             >
               Ścieżka Mistrza — etapy i progi przejścia
+              <HelpButton section="path" label="Ścieżka Mistrza" className="align-middle ml-1" />
             </h2>
             <p className="text-sm text-[var(--th-text-muted)]">
               Zdobywaj wymagany próg skuteczności w każdej serii, aby odblokować kolejne poziomy i odznaki.

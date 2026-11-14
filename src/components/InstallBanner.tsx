@@ -76,11 +76,11 @@ function Steps({ platform }: { platform: InstallPlatform }) {
  * Propozycja instalacji jako aplikacji — pływa nad dolnym menu (telefon) albo w dolnym rogu (tablet, komputer).
  * Daje więcej miejsca na ekranie (bez pasków przeglądarki). Po zamknięciu wraca po kilku dniach.
  */
-export function InstallBanner() {
+export function InstallBanner({ demoPlatform }: { demoPlatform?: InstallPlatform } = {}) {
   const prompt = useInstallPrompt();
   const [hiddenUntil, setHiddenUntil] = useState(() => readNum(DISMISS_KEY));
-  const [ready, setReady] = useState(false);
-  const [showSteps, setShowSteps] = useState(false);
+  const [ready, setReady] = useState(Boolean(demoPlatform));
+  const [showSteps, setShowSteps] = useState(Boolean(demoPlatform));
 
   // Nie wyskakuje od razu po otwarciu — najpierw chwila na rozejrzenie się.
   useEffect(() => {
@@ -88,8 +88,8 @@ export function InstallBanner() {
     return () => window.clearTimeout(t);
   }, []);
 
-  const platform = detectInstallPlatform(Boolean(prompt));
-  const visible = ready && platform !== 'none' && Date.now() >= hiddenUntil;
+  const platform = demoPlatform ?? detectInstallPlatform(Boolean(prompt));
+  const visible = ready && platform !== 'none' && (Boolean(demoPlatform) || Date.now() >= hiddenUntil);
 
   // Rezerwuje miejsce na dole strony, by baner nie zasłaniał treści.
   useEffect(() => {
@@ -124,7 +124,11 @@ export function InstallBanner() {
 
   return (
     <div
-      className="fixed z-[35] left-2 right-2 md:left-auto md:right-6 md:w-[420px] bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 animate-pop-in"
+      className={
+        demoPlatform
+          ? 'relative px-3'
+          : 'fixed z-[35] left-2 right-2 md:left-auto md:right-6 md:w-[420px] bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 animate-pop-in'
+      }
       data-testid="install-banner"
       role="region"
       aria-label="Instalacja aplikacji"

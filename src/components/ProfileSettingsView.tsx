@@ -362,6 +362,13 @@ export function ProfileSettingsView({
             </div>
           </div>
           <InstallAppButton />
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('mt:start-tour'))}
+            className="w-full min-h-[40px] rounded-xl border border-[var(--th-border)] text-sm font-bold text-[var(--th-text)] hover:border-[var(--th-primary)] cursor-pointer inline-flex items-center justify-center gap-2"
+          >
+            🧭 Uruchom przewodnik po aplikacji
+          </button>
           {isAdminDevice() && (
             <button
               type="button"

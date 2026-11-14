@@ -39,6 +39,7 @@ export function SyncPrompt({ profile, state, onSubmitPassword, onRetry }: SyncPr
         <div className="rounded-2xl border border-sky-300 bg-sky-50 text-sky-950 p-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
           <div className="flex items-start gap-2 flex-1 min-w-0">
             <CloudOff className="w-5 h-5 shrink-0 mt-0.5 text-sky-700" aria-hidden="true" />
+            <HelpButton section="sync" label="Synchronizacja" className="-mt-1.5 -ml-1 order-last text-sky-800" />
             <p className="text-sm font-semibold">
               {state.message ?? 'Chwilowy problem z połączeniem. Ponawiam automatycznie.'}
               <span className="block text-xs font-normal text-sky-800 mt-0.5">

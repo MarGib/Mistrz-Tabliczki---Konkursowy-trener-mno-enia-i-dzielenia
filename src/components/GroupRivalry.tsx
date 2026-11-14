@@ -4,6 +4,7 @@
  */
 import { CalendarCheck, Crosshair, Flame, Medal, Rocket, Sparkles, Target, Timer, TrendingUp, Trophy } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { HelpButton } from '../help/HelpButton';
 import type { UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 
@@ -235,6 +236,7 @@ export function GroupRivalry({ profiles, meId, groupName }: GroupRivalryProps) {
         <div>
           <h2 className="font-display text-lg sm:text-xl font-bold text-[var(--th-text)]">
             Wyzwania{groupName ? ` w grupie „${groupName}”` : ' w grupie'}
+            <HelpButton section="rivalry" label="Wyzwania w grupie" className="align-middle ml-1" />
           </h2>
           <p className="text-xs text-[var(--th-text-muted)]">
             {ranked.length} kategorii — sprawdź, kogo możesz dogonić.

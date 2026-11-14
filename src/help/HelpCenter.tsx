@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { ArrowLeft, Lightbulb } from 'lucide-react';
-import { HELP_SECTIONS, type HelpSectionId } from './helpContent';
+import { ArrowLeft, Compass, Lightbulb } from 'lucide-react';
+import { HELP_CHAPTERS, HELP_SECTIONS, type HelpSectionId } from './helpContent';
+
+/** Uruchamia przewodnik po aplikacji (nasłuchuje go GuidedTour). */
+export function startGuidedTour() {
+  window.dispatchEvent(new CustomEvent('mt:start-tour'));
+}
 
 interface HelpCenterProps {
   initialSection: HelpSectionId;
@@ -11,6 +16,8 @@ export function HelpCenter({ initialSection, onClose }: HelpCenterProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // „Jak zacząć” otwieramy od spisu treści; pozostałe rozdziały — od razu na właściwym miejscu.
+    if (initialSection === 'start') return;
     const el = document.getElementById(`help-${initialSection}`);
     if (el && scrollRef.current) {
       scrollRef.current.scrollTop = el.offsetTop - 64;
@@ -60,59 +67,87 @@ export function HelpCenter({ initialSection, onClose }: HelpCenterProps) {
           <h2 className="font-display text-lg font-extrabold">Jak to działa?</h2>
         </div>
 
-        <nav className="px-4 pt-4 flex flex-wrap gap-1.5" aria-label="Spis treści pomocy">
-          {HELP_SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => jump(s.id)}
-              className={`min-h-[36px] px-3 rounded-full border text-xs font-bold cursor-pointer ${
-                s.id === initialSection
-                  ? 'bg-[var(--th-primary)] border-[var(--th-primary)] text-[var(--th-primary-fg)]'
-                  : 'bg-[var(--th-surface)] border-[var(--th-border)]'
-              }`}
-            >
-              {s.title}
-            </button>
+        <nav className="px-4 pt-4 space-y-3" aria-label="Spis treści pomocy">
+          {HELP_CHAPTERS.map((ch) => (
+            <div key={ch.id}>
+              <p className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--th-text-muted)] mb-1">
+                {ch.emoji} {ch.title}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {HELP_SECTIONS.filter((s) => s.chapter === ch.id).map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => jump(s.id)}
+                    className={`min-h-[36px] px-3 rounded-full border text-xs font-bold cursor-pointer text-left ${
+                      s.id === initialSection
+                        ? 'bg-[var(--th-primary)] border-[var(--th-primary)] text-[var(--th-primary-fg)]'
+                        : 'bg-[var(--th-surface)] border-[var(--th-border)]'
+                    }`}
+                  >
+                    {s.title}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
         <div className="px-4 py-4 space-y-5">
-          {HELP_SECTIONS.map((s) => (
-            <section
-              key={s.id}
-              id={`help-${s.id}`}
-              className={`rounded-3xl border p-4 space-y-3 bg-[var(--th-surface)] ${
-                s.id === initialSection ? 'border-[var(--th-primary)] border-2' : 'border-[var(--th-border)]'
-              }`}
-            >
-              <h3 className="font-display text-lg font-extrabold">{s.title}</h3>
-              <p className="text-sm">{s.lead}</p>
-              <ol className="space-y-1.5">
-                {s.steps.map((step, i) => (
-                  <li key={i} className="flex gap-2.5 text-sm">
-                    <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold flex items-center justify-center">
-                      {i + 1}
-                    </span>
-                    <span className="pt-0.5">{step}</span>
-                  </li>
-                ))}
-              </ol>
-              {s.image && (
-                <img
-                  src={`${import.meta.env.BASE_URL}${s.image}`}
-                  alt={s.imageAlt ?? ''}
-                  loading="lazy"
-                  className="w-full rounded-2xl border border-[var(--th-border)] bg-white"
-                />
-              )}
-              {s.tip && (
-                <p className="text-xs rounded-xl bg-amber-50 border border-amber-200 text-amber-950 px-3 py-2 flex gap-2">
-                  <Lightbulb className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  <span>{s.tip}</span>
-                </p>
-              )}
-            </section>
+          {HELP_CHAPTERS.map((ch) => (
+            <div key={ch.id} className="space-y-4">
+              <h2 className="font-display text-xl font-extrabold pt-2 border-b border-[var(--th-border)] pb-1">
+                {ch.emoji} {ch.title}
+              </h2>
+              {HELP_SECTIONS.filter((s) => s.chapter === ch.id).map((s) => (
+                <section
+                  key={s.id}
+                  id={`help-${s.id}`}
+                  className={`rounded-3xl border p-4 space-y-3 bg-[var(--th-surface)] ${
+                    s.id === initialSection ? 'border-[var(--th-primary)] border-2' : 'border-[var(--th-border)]'
+                  }`}
+                >
+                  <h3 className="font-display text-lg font-extrabold">{s.title}</h3>
+                  <p className="text-sm">{s.lead}</p>
+                  <ol className="space-y-1.5">
+                    {s.steps.map((step, i) => (
+                      <li key={i} className="flex gap-2.5 text-sm">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--th-primary)] text-[var(--th-primary-fg)] text-xs font-bold flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                        <span className="pt-0.5">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  {s.image && (
+                    <img
+                      src={`${import.meta.env.BASE_URL}${s.image}`}
+                      alt={s.imageAlt ?? ''}
+                      loading="lazy"
+                      className="w-full rounded-2xl border border-[var(--th-border)] bg-white"
+                    />
+                  )}
+                  {s.tip && (
+                    <p className="text-xs rounded-xl bg-amber-50 border border-amber-200 text-amber-950 px-3 py-2 flex gap-2">
+                      <Lightbulb className="w-4 h-4 shrink-0" aria-hidden="true" />
+                      <span>{s.tip}</span>
+                    </p>
+                  )}
+                  {s.id === 'tour' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        window.setTimeout(startGuidedTour, 350);
+                      }}
+                      className="w-full min-h-[46px] rounded-2xl bg-[var(--th-primary)] text-[var(--th-primary-fg)] font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Compass className="w-5 h-5" aria-hidden="true" /> Uruchom przewodnik
+                    </button>
+                  )}
+                </section>
+              ))}
+            </div>
           ))}
           <button
             type="button"
