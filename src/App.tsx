@@ -303,7 +303,7 @@ export default function App() {
               <StatsView
                 profile={activeProfile}
                 profiles={competitionProfiles}
-                trendProfiles={profiles}
+                trendProfiles={selectedCircleId ? competitionProfiles : profiles}
                 cloudStatus={cloudStatus}
                 cloudError={cloudError}
                 isDark={activeTheme.tokens.isDark}

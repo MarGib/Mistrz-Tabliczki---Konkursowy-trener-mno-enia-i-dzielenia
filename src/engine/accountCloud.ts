@@ -523,6 +523,7 @@ export function subscribeCirclePlayers(
           avgTimeSec: typeof data.avgTimeSec === 'number' ? data.avgTimeSec : undefined,
           sessionsCount: Number(data.sessionsCount ?? 0),
           tournamentBests: (data.tournamentBests ?? {}) as CirclePlayerCard['tournamentBests'],
+          recentSeries: Array.isArray(data.recentSeries) ? data.recentSeries : undefined,
           updatedAtMs: Number(data.updatedAtMs ?? 0),
         });
       });

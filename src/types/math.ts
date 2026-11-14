@@ -216,6 +216,8 @@ export interface AvatarPreset {
 
 export interface UserProfile {
   id: string;
+  /** Tylko dla graczy z grupy: ostatnie serie odtworzone z karty wyników (do wykresu tendencji). */
+  trendSessions?: SessionRecord[];
   ownerUid?: string;
   name: string;
   schoolName?: string;

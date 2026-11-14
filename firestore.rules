@@ -142,8 +142,9 @@ service cloud.firestore {
           incoming().keys().hasOnly([
             'uid', 'profileId', 'name', 'avatarId', 'customAvatarSpec', 'xp', 'streakDays',
             'solvedTasks', 'accuracyPct', 'avgTimeSec', 'sessionsCount', 'tournamentBests',
-            'updatedAtMs', 'updatedAt'
+            'updatedAtMs', 'updatedAt', 'recentSeries'
           ]) &&
+          (!('recentSeries' in incoming()) || (incoming().recentSeries is list && incoming().recentSeries.size() <= 12)) &&
           incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 32 &&
           incoming().xp is number && incoming().xp >= 0 && incoming().xp <= 10000000 &&
           incoming().updatedAt == request.time;

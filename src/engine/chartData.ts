@@ -29,7 +29,7 @@ export function buildUserSpeedTrendData(
   let maxLen = 0;
 
   const summaries: UserSpeedSummary[] = activeProfiles.map((p) => {
-    const slice = p.sessions.slice(-maxSessions);
+    const slice = (p.trendSessions ?? p.sessions).slice(-maxSessions);
     trimmedByProfile.set(p.id, slice);
     if (slice.length > maxLen) {
       maxLen = slice.length;

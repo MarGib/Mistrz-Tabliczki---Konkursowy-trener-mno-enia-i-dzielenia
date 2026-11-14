@@ -23,6 +23,8 @@ export interface ArenaPlayerCard {
   sessionsCount: number;
   tournamentBests: Record<string, TournamentBest>;
   updatedAtMs: number;
+  /** Ostatnie serie: t = czas, s = średni czas na zadanie [s], a = skuteczność [%], n = liczba zadań. */
+  recentSeries?: { t: number; s: number; a: number; n: number }[];
 }
 
 export function generateJoinCode(uid: string): string {
@@ -159,6 +161,12 @@ export function profileToArenaPlayerCard(
     sessionsCount: Math.max(0, Math.min(100_000, sessions.length)),
     tournamentBests: stripUndefinedDeep(profile.tournamentBests ?? {}),
     updatedAtMs: Math.max(0, Math.round(now)),
+    recentSeries: sessions.slice(-12).map((r) => ({
+      t: Math.round(r.timestamp || 0),
+      s: Math.min(300, Number(((r.avgTimeMs || 0) / 1000).toFixed(2))),
+      a: Math.max(0, Math.min(100, Math.round(r.accuracyPct || 0))),
+      n: Math.max(0, Math.min(1000, Math.round(r.totalTasks || 0))),
+    })),
   };
 
   if (profile.schoolName?.trim()) {
@@ -215,6 +223,22 @@ export function arenaPlayerCardToUserProfile(card: ArenaPlayerCard): UserProfile
     earnedBadges: [],
     memories: {},
     sessions: synthSession,
+    trendSessions: Array.isArray(card.recentSeries)
+      ? card.recentSeries.map((r, i) => ({
+          id: `trend-${card.profileId}-${i}`,
+          timestamp: Number(r.t) || 0,
+          mode: 'mixed' as const,
+          seriesTitle: 'Seria',
+          totalTasks: Number(r.n) || 0,
+          correctTasks: Math.round(((Number(r.n) || 0) * (Number(r.a) || 0)) / 100),
+          accuracyPct: Number(r.a) || 0,
+          totalTimeMs: Math.round((Number(r.s) || 0) * 1000 * (Number(r.n) || 0)),
+          avgTimeMs: Math.round((Number(r.s) || 0) * 1000),
+          pointsEarned: 0,
+          passedThreshold: true,
+          attempts: [],
+        }))
+      : [],
     tournamentBests: card.tournamentBests ?? {},
     settings: { ...DEFAULT_SETTINGS },
     activeThemeId: DEFAULT_THEME_ID,
