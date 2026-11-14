@@ -88,6 +88,7 @@ export default function App() {
     retrySync,
     dbIssue,
     logoutAccount,
+    deleteAccountForever,
     loginToCloudAccount,
     createAccountWithCloud,
     selectedCircleId,
@@ -483,6 +484,11 @@ export default function App() {
                 onLogout={() => {
                   void logoutAccount(activeProfile.id);
                   handleSelectTab('trening');
+                }}
+                onDeleteAccount={async (pid) => {
+                  const res = await deleteAccountForever(pid);
+                  if (res.ok) handleSelectTab('trening');
+                  return res;
                 }}
                 ownedProfiles={ownedProfiles}
                 activeProfile={activeProfile}

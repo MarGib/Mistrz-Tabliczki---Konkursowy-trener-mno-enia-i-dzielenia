@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zasady prywatności — Mistrz Tabliczki</title>
+<meta name="description" content="Jakie dane zbiera aplikacja Mistrz Tabliczki, po co, gdzie są przechowywane i jak je usunąć.">
+<style>
+  :root { color-scheme: light dark; --fg:#14213d; --muted:#5b6b82; --bg:#f7fafc; --card:#fff; --line:#dbe4ee; --accent:#16a34a; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#e8eef6; --muted:#9fb0c4; --bg:#0f172a; --card:#162033; --line:#26344d; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--fg); background:var(--bg); }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 18px 60px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px 22px 10px; margin:16px 0; }
+  h1 { font-size: 1.75rem; line-height:1.2; margin: 0 0 6px; }
+  h2 { font-size: 1.15rem; margin: 0 0 8px; }
+  p, li { margin: 0 0 10px; }
+  ul { padding-left: 1.2em; margin: 0 0 12px; }
+  .muted { color: var(--muted); font-size: .92rem; }
+  .lead { font-size: 1.06rem; }
+  .ok { color: var(--accent); font-weight: 700; }
+  a { color: inherit; }
+  .back { display:inline-block; margin-top:8px; padding:10px 16px; border-radius:14px; background:var(--accent); color:#fff; text-decoration:none; font-weight:700; }
+  table { width:100%; border-collapse: collapse; margin: 0 0 12px; font-size:.95rem; }
+  td, th { border-top:1px solid var(--line); padding:8px 6px; text-align:left; vertical-align:top; }
+  th { font-weight:700; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🔒 Zasady prywatności</h1>
+  <p class="muted">Mistrz Tabliczki — trener mnożenia i dzielenia · obowiązują od 15 listopada 2026</p>
+
+  <div class="card">
+    <p class="lead"><span class="ok">W skrócie:</span> nie pytamy o imię i nazwisko, e-mail, telefon, wiek, szkołę ani zdjęcie. Konto to dowolny pseudonim (login) i hasło. Zapisujemy tylko wyniki gry — po to, żeby dziecko i rodzic widzieli postęp. Bez reklam, bez śledzenia, bez sprzedaży danych. Aplikacja jest darmowa.</p>
+  </div>
+
+  <div class="card">
+    <h2>Kto odpowiada za dane</h2>
+    <p>Administratorem danych jest autor aplikacji: <b>MarGib — Mariusz Gibki</b>. Aplikacja jest prywatnym, niekomercyjnym projektem dla rodziny i znajomych.</p>
+    <p>Kontakt: w aplikacji <b>Pomoc → „Napisz do opiekuna”</b> (albo na ekranie logowania „Nie pamiętam hasła”). Odpowiadamy możliwie szybko.</p>
+  </div>
+
+  <div class="card">
+    <h2>Jakie dane zbieramy i po co</h2>
+    <table>
+      <tr><th>Dane</th><th>Po co</th></tr>
+      <tr><td>Login (pseudonim) i hasło — hasło nigdy nie jest zapisywane wprost, tylko jako nieodwracalny skrót</td><td>logowanie na różnych urządzeniach</td></tr>
+      <tr><td>Wyniki gry: które działania, poprawność, tempo, serie, XP, gwiazdki, postęp na ścieżce, ustawienia, awatar (obrazek, nie zdjęcie)</td><td>nauka (powtórki), statystyki, raport dla rodzica</td></tr>
+      <tr><td>Członkostwo w grupach i karta wyników (pseudonim, awatar, XP, poprawność, tempo)</td><td>rywalizacja w rodzinie/grupie — widzą ją <b>tylko członkowie tej grupy</b> i tylko gdy gracz na to pozwoli</td></tr>
+      <tr><td>Informacje techniczne: losowy identyfikator urządzenia, rodzaj urządzenia i przeglądarki, wersja aplikacji, czy jest zainstalowana, loginy używane na urządzeniu, raporty błędów, dziennik prób logowania (login, czy się udało, rodzaj urządzenia, czas)</td><td>działanie i naprawianie aplikacji, bezpieczeństwo kont</td></tr>
+      <tr><td>Uczciwa gra: liczniki tempa i sposobu odpowiadania w seriach, zgłoszenia „do sprawdzenia”</td><td>wykrywanie botów i podpowiadania, żeby rankingi były uczciwe</td></tr>
+      <tr><td>Prośby o pomoc: login, treść i — tylko jeśli ktoś sam poda — kontakt</td><td>odpowiedź na prośbę (np. nowe hasło)</td></tr>
+    </table>
+    <p class="muted">Nie zapisujemy adresów IP, lokalizacji, kontaktów ani niczego z innych aplikacji. Nie stosujemy plików cookie do śledzenia ani reklam. Aplikacja zapisuje swoje dane w pamięci przeglądarki na urządzeniu (żeby działała bez internetu).</p>
+  </div>
+
+  <div class="card">
+    <h2>Dzieci i zgoda rodzica</h2>
+    <p>Aplikacja jest przeznaczona dla dzieci <b>pod opieką rodzica lub opiekuna</b>. Konto dziecka zakłada lub zatwierdza rodzic/opiekun — to on wyraża zgodę na korzystanie z aplikacji (podstawa: zgoda opiekuna, art. 6 ust. 1 lit. a i art. 8 RODO). Dane techniczne i zapisy bezpieczeństwa przetwarzamy w prawnie uzasadnionym interesie: żeby aplikacja działała bezpiecznie (art. 6 ust. 1 lit. f RODO).</p>
+  </div>
+
+  <div class="card">
+    <h2>Gdzie są dane i kto je widzi</h2>
+    <ul>
+      <li><b>Baza i logowanie:</b> Google Firebase (Google Cloud), serwery w <b>Warszawie</b> (region europe-central2). Google działa jako podmiot przetwarzający na zlecenie.</li>
+      <li><b>Strona aplikacji:</b> GitHub Pages (GitHub, Inc.) — serwuje pliki aplikacji; dostawca może technicznie rejestrować adresy IP w swoich logach serwera.</li>
+      <li><b>Dostęp:</b> gracz widzi swoje dane; członkowie grupy — kartę wyników gracza z tej grupy; autor aplikacji (administrator) — dane potrzebne do pomocy, bezpieczeństwa i kopii zapasowej.</li>
+      <li>Nikomu nie sprzedajemy ani nie udostępniamy danych w celach marketingowych.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Jak długo</h2>
+    <ul>
+      <li>Wyniki i konto — do czasu usunięcia konta.</li>
+      <li>Dzienniki techniczne (urządzenia, błędy, logowania, prośby o pomoc) — najwyżej 12 miesięcy.</li>
+      <li>Zgłoszenia „uczciwej gry” — najwyżej 12 miesięcy od ostatniego zgłoszenia.</li>
+      <li>Kopie zapasowe bazy (szyfrowane) — najwyżej 90 dni.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Twoje prawa</h2>
+    <ul>
+      <li><b>Usunięcie konta:</b> w aplikacji <b>Konto → „Usuń konto i wszystkie wyniki”</b> — wyniki, historia, gwiazdki i miejsca w grupach znikają od razu z chmury i z urządzenia.</li>
+      <li>Dostęp do danych i ich kopia, poprawienie, ograniczenie przetwarzania, sprzeciw, cofnięcie zgody — napisz przez „Napisz do opiekuna”.</li>
+      <li>Masz prawo złożyć skargę do Prezesa Urzędu Ochrony Danych Osobowych (uodo.gov.pl).</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Zmiany</h2>
+    <p>Gdy zasady się zmienią, zaktualizujemy tę stronę i datę na górze, a większe zmiany pokażemy w aplikacji w okienku „Co nowego”.</p>
+  </div>
+
+  <a class="back" href="./">← Wróć do aplikacji</a>
+</main>
+</body>
+</html>

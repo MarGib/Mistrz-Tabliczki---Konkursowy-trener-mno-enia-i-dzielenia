@@ -398,6 +398,9 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Zapisujemy tylko wyniki gry: które działania, ile poprawnie, w jakim tempie — po to, żeby gracz i rodzic widzieli postęp.',
       'Wyniki widzą tylko członkowie Twojej grupy (np. rodzina), i tylko jeśli tego chcesz.',
       'Brak reklam, brak śledzenia, brak sprzedaży danych. Aplikacja jest darmowa.',
+      'Dane są w Google Firebase na serwerach w Warszawie. Konto dziecka zakłada lub zatwierdza rodzic.',
+      'Konto → „Usuń konto i wszystkie wyniki” trwale usuwa konto z chmury i z urządzenia (trzeba wpisać login, żeby potwierdzić).',
+      'Pełne zasady: przycisk „Zasady prywatności” w Koncie albo strona prywatnosc.html obok aplikacji.',
     ],
   },
   {

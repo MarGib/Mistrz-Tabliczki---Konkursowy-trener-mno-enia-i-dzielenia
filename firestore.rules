@@ -161,7 +161,8 @@ service cloud.firestore {
         incoming().uid == request.auth.uid &&
         incoming().profileId is string && incoming().profileId.size() >= 1 && incoming().profileId.size() <= 64 &&
         incoming().createdAt == request.time;
-      allow delete: if false;
+      // Usunięcie konta przez gracza (RODO) — tylko własny login.
+      allow delete: if isSignedIn() && existing().uid == request.auth.uid;
     }
 
       // 6. Konta login + hasło: pełny profil gracza, widoczny tylko dla właściciela.

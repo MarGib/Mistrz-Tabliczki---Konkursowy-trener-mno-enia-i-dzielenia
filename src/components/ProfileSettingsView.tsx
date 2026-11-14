@@ -50,11 +50,13 @@ import { WhatsNewDialog } from './WhatsNewDialog';
 import { HowWePlayDialog } from './HowWePlayDialog';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
 import { AvatarStudio } from './AvatarStudio';
+import { DeleteAccountCard } from './DeleteAccountCard';
 import { useFullHistory } from '../engine/useHistory';
 
 interface ProfileSettingsViewProps {
   accountState?: AccountSyncState;
   onLogout: () => void;
+  onDeleteAccount?: (profileId: string) => Promise<{ ok: boolean; error?: string }>;
   onCreateAccount: (
     name: string,
     avatarId: string,
@@ -116,6 +118,7 @@ const QUICK_THEME_IDS = [
 ];
 
 export function ProfileSettingsView({
+  onDeleteAccount,
   ownedProfiles,
   activeProfile,
   schoolDirectory,
@@ -398,6 +401,8 @@ export function ProfileSettingsView({
               To konto nie jest jeszcze w chmurze — „Wyloguj” wróci do wyboru kont, a wyniki zostaną na tym urządzeniu.
             </p>
           )}
+
+          {onDeleteAccount && <DeleteAccountCard profile={activeProfile} onDelete={onDeleteAccount} />}
 
           {/* Edit Current User Name, School & Class */}
           <form onSubmit={handleSaveProfileDetails} className="space-y-3">

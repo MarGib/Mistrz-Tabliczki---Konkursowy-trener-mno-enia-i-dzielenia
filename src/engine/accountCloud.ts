@@ -22,6 +22,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updatePassword,
+  deleteUser,
 } from 'firebase/auth';
 import {
   type Firestore,
@@ -674,4 +675,28 @@ export async function fetchHistory(login: string): Promise<SessionLite[] | null>
     if (Array.isArray(items)) out.push(...(items as SessionLite[]));
   });
   return out;
+}
+
+/* ------------------------------ Usunięcie konta (RODO) ------------------------------ */
+
+/**
+ * Trwale usuwa konto gracza z chmury: historię serii, karty i członkostwo w grupach, profil,
+ * login i konto logowania. Wymaga skrótu hasła (ponowne zalogowanie przed usunięciem).
+ * Zapis weryfikacji „uczciwej gry” (jeśli był) zostaje u opiekuna do 12 miesięcy.
+ */
+export async function deleteAccountEverywhere(profile: UserProfile): Promise<void> {
+  if (!profile.passwordHash) throw new Error('Konto nie ma hasła — nie ma czego usuwać w chmurze.');
+  const login = normalizeLogin(profile.login || profile.name);
+  const { auth, db } = getHandle(login);
+  const cred = await signInWithEmailAndPassword(auth, loginToEmail(login), secretFromHash(profile.passwordHash));
+  const uid = cred.user.uid;
+  const hist = await getDocs(collection(db, 'accounts', uid, 'history')).catch(() => null);
+  await Promise.all((hist?.docs ?? []).map((d) => deleteDoc(d.ref).catch(() => {})));
+  for (const c of profile.circles ?? []) {
+    await deleteDoc(doc(db, 'circles', c.id, 'players', uid)).catch(() => {});
+    await deleteDoc(doc(db, 'circles', c.id, 'members', uid)).catch(() => {});
+  }
+  await deleteDoc(doc(db, 'accounts', uid));
+  await deleteDoc(doc(db, 'logins', loginKey(login))).catch(() => {});
+  await deleteUser(cred.user);
 }

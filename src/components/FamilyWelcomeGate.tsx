@@ -485,7 +485,8 @@ export function FamilyWelcomeGate({
                     Zaczynasz od 0 XP. Twoja nazwa to też login — zapamiętaj ją razem z hasłem, aby zalogować się na innym urządzeniu.
                   </p>
                   <p className="mt-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 px-3 py-2 text-xs leading-relaxed" data-testid="privacy-note">
-                    🔒 <strong>Nie podajesz żadnych danych:</strong> bez e-maila, nazwiska, telefonu ani wieku. Wymyśl dowolny login (albo kliknij 🎲), wybierz awatara i ucz się. Zapisujemy tylko wyniki gry, żebyś widział, jak Ci idzie.
+                    🔒 <strong>Nie podajesz żadnych danych:</strong> bez e-maila, nazwiska, telefonu ani wieku. Wymyśl dowolny login (albo kliknij 🎲), wybierz awatara i ucz się. Zapisujemy tylko wyniki gry, żebyś widział, jak Ci idzie. Konto zakłada lub zatwierdza rodzic.{' '}
+                    <a href="./prywatnosc.html" target="_blank" rel="noopener" className="underline font-semibold">Zasady prywatności</a>
                   </p>
                 </div>
 

@@ -88,6 +88,7 @@ import {
   type ReviewEvent,
   fetchAccountReview,
   reportAccountReview,
+  deleteAccountEverywhere,
   signInAccountAndFetch,
   signOutAccount,
   subscribeAccountProfile,
@@ -1839,6 +1840,50 @@ export function useAppStore() {
     []
   );
 
+  /**
+   * Trwałe usunięcie konta (prawo do usunięcia danych): chmura + to urządzenie.
+   * Konto lokalne (bez chmury) znika tylko z urządzenia.
+   */
+  const deleteAccountForever = useCallback(
+    async (profileId: string): Promise<{ ok: boolean; error?: string }> => {
+      const p = storeRef.current.profiles.find((x) => x.id === profileId);
+      if (!p) return { ok: false, error: 'Nie ma takiego konta na tym urządzeniu.' };
+      if (p.cloudUid) {
+        try {
+          await withTimeout(deleteAccountEverywhere(p), 30_000, 'Baza nie odpowiada. Spróbuj ponownie przy dobrym internecie.');
+        } catch (err) {
+          return { ok: false, error: describeAccountError(err) };
+        }
+      }
+      try {
+        window.localStorage.removeItem(`mt_hist_${profileId}`);
+        window.localStorage.removeItem(`mt_rules_v2_${profileId}`);
+        window.localStorage.removeItem(`mt_tour_done_${profileId}`);
+      } catch {
+        // ignore
+      }
+      setStore((prev) => {
+        const profiles = prev.profiles.filter((x) => x.id !== profileId);
+        const owned = prev.ownedProfileIds.filter((id) => id !== profileId);
+        return {
+          ...prev,
+          profiles,
+          ownedProfileIds: owned,
+          activeProfileId: owned[0] ?? profiles[0]?.id ?? '',
+          hasSelectedProfile: false,
+        };
+      });
+      setAccountSync((prev) => {
+        const next = { ...prev };
+        delete next[profileId];
+        return next;
+      });
+      setSelectedCircleId(null);
+      return { ok: true };
+    },
+    []
+  );
+
   /* ============================== Grupy ============================== */
   const updateProfileCircles = useCallback(
     (profileId: string, updater: (list: CircleMembership[]) => CircleMembership[]) => {
@@ -2039,6 +2084,7 @@ export function useAppStore() {
     dbIssue,
     setCloudSync,
     logoutAccount,
+    deleteAccountForever,
     loginToCloudAccount,
     createAccountWithCloud,
     selectedCircleId: effectiveCircleId,
