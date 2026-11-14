@@ -106,3 +106,25 @@ test('Rodziny działań: 7×8 → 8×7, 56:7, 56:8', () => {
   for (const id of ['mul:7x8', 'mul:8x7', 'div:56/7', 'div:56/8']) assert.ok(ids.includes(id), `${id} w serii`);
   assert.equal(series.length, 8);
 });
+
+import { dailyGoalState } from './dailyGoal';
+import { personalRecord } from './records';
+
+test('Cel dnia: liczy serie od północy, 0 = wyłączony', () => {
+  const now = new Date(2026, 10, 14, 18, 0).getTime();
+  const today = new Date(2026, 10, 14, 9, 0).getTime();
+  const yesterday = new Date(2026, 10, 13, 22, 0).getTime();
+  const st = dailyGoalState([{ timestamp: today }, { timestamp: today + 1 }, { timestamp: yesterday }], 3, now);
+  assert.deepEqual(st, { goal: 3, done: 2, complete: false, pct: 67 });
+  assert.equal(dailyGoalState([], 0, now), null);
+  assert.equal(dailyGoalState([], undefined, now)?.goal, 3);
+});
+
+test('Rekord osobisty: tempo i pierwsza seria bez błędu', () => {
+  const s = (avg: number, acc: number, tasks = 10, maxRange = 100) => ({ avgTimeMs: avg, accuracyPct: acc, totalTasks: tasks, maxRange });
+  assert.equal(personalRecord([s(3000, 95), s(2800, 90)], s(2500, 95))?.kind, 'tempo');
+  assert.equal(personalRecord([s(3000, 95), s(2800, 90)], s(2900, 95)), null);
+  assert.equal(personalRecord([s(3000, 95)], s(2000, 95)), null, 'za mało historii na rekord tempa');
+  assert.equal(personalRecord([s(3000, 90)], s(3500, 100))?.kind, 'first-perfect');
+  assert.equal(personalRecord([s(3000, 95), s(2800, 95)], s(1000, 95, 10, 500)), null, 'inny przedział');
+});

@@ -998,6 +998,38 @@ export function ProfileSettingsView({
             </div>
           </div>
 
+          {/* Cel dnia (ustawia rodzic) */}
+          <div>
+            <span className="block text-sm font-bold text-[var(--th-text)] mb-1">Cel na dziś (ustawia rodzic)</span>
+            <p className="text-xs text-[var(--th-text-muted)] mb-2">Ile serii dziennie — na ekranie startowym pojawi się pasek „Cel na dziś”.</p>
+            <div className="grid grid-cols-5 gap-2" data-testid="daily-goal-setting">
+              {[
+                { val: 0, label: 'Wył.' },
+                { val: 2, label: '2' },
+                { val: 3, label: '3' },
+                { val: 5, label: '5' },
+                { val: 8, label: '8' },
+              ].map((opt) => {
+                const active = (activeProfile.settings.dailyGoalSeries ?? 3) === opt.val;
+                return (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => onUpdateSettings({ dailyGoalSeries: opt.val })}
+                    className={`min-h-[44px] rounded-xl border text-sm font-bold cursor-pointer ${
+                      active
+                        ? 'bg-[var(--th-soft-tint)] border-[var(--th-primary)] text-[var(--th-text)]'
+                        : 'bg-[var(--th-surface-muted)] border-[var(--th-border)] text-[var(--th-text-muted)]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Auto-Hint Delay */}
           <div>
             <span className="block text-sm font-bold text-[var(--th-text)] mb-2">

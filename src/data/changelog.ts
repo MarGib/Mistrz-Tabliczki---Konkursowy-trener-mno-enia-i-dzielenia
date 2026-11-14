@@ -18,6 +18,16 @@ export interface ReleaseNote {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: '2026-11-14c',
+    date: '14 listopada 2026',
+    title: 'Cel na dziś i rekordy',
+    items: [
+      { emoji: '🎯', text: 'Pasek „Cel na dziś” pokazuje, ile serii zostało. Rodzic ustawia cel w zakładce Konto (domyślnie 3).' },
+      { emoji: '🏆', text: 'Po serii zobaczysz, gdy pobijesz swój rekord tempa albo pierwszy raz zagrasz bez błędu.' },
+      { emoji: '👨‍👩‍👧', text: 'Powtórki ćwiczą całe rodziny działań: pomyłka przy 7 × 8 dokłada też 8 × 7, 56 : 7 i 56 : 8.' },
+    ],
+  },
+  {
     id: '2026-11-14b',
     date: '14 listopada 2026',
     title: 'Graj dalej jednym dotknięciem',

@@ -49,6 +49,7 @@ import { VictoryPosterCard } from './VictoryPosterCard';
 import { VisualHintCard } from './VisualHintCard';
 import { setGameActive } from '../autoUpdate';
 import { seriesInsight } from '../engine/seriesInsight';
+import { personalRecord } from '../engine/records';
 
 interface ExerciseArenaProps {
   config: ActiveSeriesConfig;
@@ -64,6 +65,8 @@ interface ExerciseArenaProps {
   onCompleteSession: (session: SessionRecord, attempts: TaskAttempt[]) => void;
   onExit: () => void;
   onRestartWithFocus: (focusIds: string[], title: string) => void;
+  /** Wcześniejsze serie gracza (do rekordów osobistych). */
+  pastSessions?: SessionRecord[];
 }
 
 function formatSeconds(ms: number): string {
@@ -84,6 +87,7 @@ export function ExerciseArena({
   onCompleteSession,
   onExit,
   onRestartWithFocus,
+  pastSessions,
 }: ExerciseArenaProps) {
   const [problems, setProblems] = useState<MathProblem[]>(() =>
     selectAdaptiveSeries({
@@ -114,6 +118,8 @@ export function ExerciseArena({
   } | null>(null);
   const [shakeWrong, setShakeWrong] = useState(false);
   const [elapsedTaskMs, setElapsedTaskMs] = useState(0);
+  // Serie sprzed tej serii — zapamiętane przy starcie (po zapisie lista zawiera już bieżącą).
+  const [pastAtStart] = useState(() => pastSessions ?? []);
   const [isFinished, setIsFinished] = useState(false);
   const [burstKey, setBurstKey] = useState(0);
   const [burstLabel, setBurstLabel] = useState('');
@@ -592,6 +598,21 @@ export function ExerciseArena({
               <div className="text-xs text-[var(--th-text-muted)]">Zadań do powtórki</div>
             </div>
           </div>
+
+          {/* Rekord osobisty */}
+          {(() => {
+            const rec = personalRecord(pastAtStart, {
+              avgTimeMs,
+              accuracyPct,
+              totalTasks: attempts.length,
+              maxRange: config.maxRange,
+            });
+            return rec ? (
+              <p className="relative z-10 -mt-2 mb-3 rounded-2xl bg-amber-100 border border-amber-300 text-amber-950 px-4 py-3 text-sm sm:text-base font-bold" data-testid="personal-record">
+                🏆 {rec.text}
+              </p>
+            ) : null;
+          })()}
 
           {/* Jeden konkretny wniosek z serii */}
           {seriesInsight(attempts) && (

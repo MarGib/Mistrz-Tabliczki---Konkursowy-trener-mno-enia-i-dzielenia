@@ -299,6 +299,7 @@ export default function App() {
               <ExerciseArena
                 key={`${activeSeries.title}-${activeSeries.taskCount}-${activeSeries.maxRange}-${activeSeries.focusFactIds?.join(',') ?? ''}`}
                 config={activeSeries}
+                pastSessions={activeProfile.sessions}
                 memories={activeProfile.memories}
                 settings={activeProfile.settings}
                 device={device}

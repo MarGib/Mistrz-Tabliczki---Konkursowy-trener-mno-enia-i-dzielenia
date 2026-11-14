@@ -25,6 +25,8 @@ import { LEVEL_STAGES } from '../data/curriculum';
 import { MasterChallengeCard } from './MasterChallengeCard';
 import { StagePath } from './StagePath';
 import { NextStepCard } from './NextStepCard';
+import { DailyGoalBar } from './DailyGoalBar';
+import { dailyGoalState } from '../engine/dailyGoal';
 import { chooseNextStep } from '../engine/nextStep';
 import { hasAccountPassword } from '../engine/accountSecurity';
 import {
@@ -101,6 +103,7 @@ export function TrainingHome({
   );
 
   const nextStep = useMemo(() => chooseNextStep(profile), [profile]);
+  const goal = dailyGoalState(profile.sessions, profile.settings.dailyGoalSeries);
 
   const activeCalendarDay =
     calendar.days.find((d) => d.dateKey === selectedDayKey) ?? calendar.days[0];
@@ -172,7 +175,10 @@ export function TrainingHome({
         </div>
       )}
 
-      <NextStepCard step={nextStep} onStart={onStartSeries} />
+      <div className="space-y-2.5">
+        <NextStepCard step={nextStep} onStart={onStartSeries} />
+        {goal && <DailyGoalBar state={goal} />}
+      </div>
 
       {reviewReminder && reviewReminder.hasDue && nextStep.kind !== 'review' && (
         <div
