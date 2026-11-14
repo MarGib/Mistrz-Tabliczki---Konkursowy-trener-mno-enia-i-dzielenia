@@ -114,9 +114,17 @@ export type CloudSyncStatus = 'offline' | 'connecting' | 'synced' | 'error';
 
 /** Stan synchronizacji konta login + hasło (per profil). */
 export interface AccountSyncState {
-  state: 'local' | 'needs-password' | 'syncing' | 'synced' | 'error';
+  /** waiting = chwilowy problem (sieć, baza) — aplikacja ponawia sama, nic nie trzeba robić. */
+  state: 'local' | 'needs-password' | 'syncing' | 'synced' | 'waiting' | 'error';
   message?: string;
+  /** Kiedy nastąpi kolejna automatyczna próba (ms). */
+  retryAt?: number;
+  /** Wyniki zapisane na urządzeniu jeszcze nie dotarły do bazy. */
+  unsent?: boolean;
 }
+
+/** Ponawianie: 5 s, 15 s, 30 s, 1 min, 2 min, potem co 5 min. */
+const RETRY_STEPS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 300_000];
 
 function profileLogin(p: Pick<UserProfile, 'login' | 'name'>): string {
   return normalizeLogin(p.login || p.name);
@@ -1180,6 +1188,8 @@ export function useAppStore() {
   const accountSyncRef = useRef(accountSync);
   accountSyncRef.current = accountSync;
   const pendingPasswordsRef = useRef<Map<string, string>>(new Map());
+  const linkFailuresRef = useRef<Map<string, number>>(new Map());
+  const linkRetryTimersRef = useRef<Map<string, number>>(new Map());
   const pushedAccountFpRef = useRef<Map<string, string>>(new Map());
 
   const mergeCloudIntoLocal = useCallback(
@@ -1265,6 +1275,7 @@ export function useAppStore() {
           ),
         }));
         pendingPasswordsRef.current.delete(profileId);
+        linkFailuresRef.current.delete(profileId);
         setSyncFor(profileId, { state: 'synced' });
         void ensureCircles(profileId);
         return 'synced';
@@ -1278,7 +1289,19 @@ export function useAppStore() {
           return 'needs-password';
         }
         pendingPasswordsRef.current.set(profileId, '');
-        setSyncFor(profileId, { state: 'error', message: describeAccountError(err) });
+        const n = linkFailuresRef.current.get(profileId) ?? 0;
+        linkFailuresRef.current.set(profileId, n + 1);
+        const delay = RETRY_STEPS_MS[Math.min(n, RETRY_STEPS_MS.length - 1)];
+        window.clearTimeout(linkRetryTimersRef.current.get(profileId));
+        linkRetryTimersRef.current.set(
+          profileId,
+          window.setTimeout(() => void linkAccountRef.current(profileId), delay)
+        );
+        setSyncFor(profileId, {
+          state: 'waiting',
+          message: `${describeAccountError(err)} Ponowię automatycznie.`,
+          retryAt: Date.now() + delay,
+        });
         return 'error';
       }
     },
@@ -1287,15 +1310,33 @@ export function useAppStore() {
 
   linkAccountRef.current = linkAccount;
 
+  /** „Spróbuj teraz”: natychmiastowa ponowna próba połączenia i wysyłki. */
+  const retrySync = useCallback((profileId: string) => {
+    linkFailuresRef.current.delete(profileId);
+    pushFailuresRef.current.delete(profileId);
+    pushedAccountFpRef.current.delete(profileId);
+    window.clearTimeout(linkRetryTimersRef.current.get(profileId));
+    void linkAccountRef.current(profileId).then(() => setPushTick((t) => t + 1));
+  }, []);
+
   // Ponów synchronizację kont po powrocie internetu.
   useEffect(() => {
     const onOnline = () => {
+      linkFailuresRef.current.clear();
       for (const [id, pwd] of pendingPasswordsRef.current.entries()) {
         void linkAccount(id, pwd);
       }
+      setPushTick((t) => t + 1);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') onOnline();
     };
     window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [linkAccount]);
 
   // Po odświeżeniu strony: które konta mają zapamiętaną sesję w chmurze?
@@ -1330,6 +1371,7 @@ export function useAppStore() {
   //  * karta wyników w grupach tylko, gdy zmieniły się wyniki lub widoczność,
   //  * bezpiecznik: >20 zapisów jednego konta w 10 min = wstrzymanie (ochrona dziennego limitu bazy).
   const lastPushAtRef = useRef<Map<string, number>>(new Map());
+  const pushFailuresRef = useRef<Map<string, number>>(new Map());
   const pushLogRef = useRef<Map<string, number[]>>(new Map());
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1354,7 +1396,38 @@ export function useAppStore() {
         pushLogRef.current.set(p.id, log);
         lastPushAtRef.current.set(p.id, now);
         pushedAccountFpRef.current.set(p.id, fp);
-        void pushAccountProfile(p).catch(() => pushedAccountFpRef.current.delete(p.id));
+        {
+          const pid = p.id;
+          // Zapis trafia od razu do trwałej kolejki na urządzeniu; jeśli baza nie potwierdzi go w 12 s,
+          // pokazujemy spokojną informację — wyśle się sam, gdy wróci połączenie.
+          const slowTimer = window.setTimeout(() => {
+            setSyncFor(pid, {
+              state: 'synced',
+              unsent: true,
+              message: 'Wyniki są bezpieczne na tym urządzeniu i wyślą się same, gdy wróci internet.',
+            });
+          }, 12_000);
+          void pushAccountProfile(p)
+            .then(() => {
+              window.clearTimeout(slowTimer);
+              pushFailuresRef.current.delete(pid);
+              if (accountSyncRef.current[pid]?.unsent) setSyncFor(pid, { state: 'synced' });
+            })
+            .catch((err) => {
+              window.clearTimeout(slowTimer);
+              pushedAccountFpRef.current.delete(pid);
+              const n = pushFailuresRef.current.get(pid) ?? 0;
+              pushFailuresRef.current.set(pid, n + 1);
+              const delay = RETRY_STEPS_MS[Math.min(n, RETRY_STEPS_MS.length - 1)];
+              setSyncFor(pid, {
+                state: 'synced',
+                unsent: true,
+                message: `${describeAccountError(err)} Ponowię wysyłanie automatycznie.`,
+                retryAt: Date.now() + delay,
+              });
+              window.setTimeout(() => setPushTick((t) => t + 1), delay);
+            });
+        }
         const cardFp = [
           p.xp,
           p.sessions?.length ?? 0,
@@ -1451,9 +1524,10 @@ export function useAppStore() {
         // Brak internetu: konto działa lokalnie i zsynchronizuje się później.
         pendingPasswordsRef.current.set(created.id, pwd);
         syncState = {
-          state: 'error',
-          message: 'Brak połączenia — konto zsynchronizuje się, gdy wróci internet.',
+          state: 'waiting',
+          message: 'Brak połączenia — konto działa na tym urządzeniu i połączy się z chmurą samo, gdy wróci internet.',
         };
+        window.setTimeout(() => void linkAccountRef.current(created.id), RETRY_STEPS_MS[0]);
       }
 
       setStore((prev) => ({
@@ -1789,6 +1863,7 @@ export function useAppStore() {
     resetLocalData,
     legacyGoogleSync: LEGACY_GOOGLE_SYNC_ENABLED,
     accountSync,
+    retrySync,
     logoutAccount,
     loginToCloudAccount,
     createAccountWithCloud,

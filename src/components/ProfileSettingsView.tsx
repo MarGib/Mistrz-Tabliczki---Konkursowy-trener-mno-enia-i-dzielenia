@@ -492,14 +492,20 @@ export function ProfileSettingsView({
               <span
                 data-testid="account-sync-status"
                 className={`text-[11px] font-bold ${
-                  accountState?.state === 'synced'
+                  accountState?.state === 'synced' && !accountState.unsent
                     ? 'text-emerald-600'
+                    : accountState?.state === 'waiting' || accountState?.unsent
+                    ? 'text-sky-600'
                     : accountState?.state === 'error'
                     ? 'text-red-500'
                     : 'text-[var(--th-text-muted)]'
                 }`}
               >
-                {accountState?.state === 'synced'
+                {accountState?.state === 'synced' && accountState.unsent
+                  ? '⏳ Wyniki czekają na wysłanie'
+                  : accountState?.state === 'waiting'
+                  ? '⏳ Czekam na połączenie (ponawiam sam)'
+                  : accountState?.state === 'synced'
                   ? '☁ Zsynchronizowano'
                   : accountState?.state === 'syncing'
                   ? 'Łączenie…'
@@ -562,7 +568,7 @@ export function ProfileSettingsView({
               </div>
             </div>
 
-            {accountState?.message && accountState.state !== 'synced' && (
+            {accountState?.message && (accountState.state !== 'synced' || accountState.unsent) && (
               <p className="text-xs font-semibold text-[var(--th-text-muted)]">{accountState.message}</p>
             )}
             {credError && (

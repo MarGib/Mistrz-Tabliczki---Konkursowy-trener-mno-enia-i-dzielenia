@@ -32,6 +32,9 @@ import {
   doc,
   getDoc,
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -74,10 +77,25 @@ function getHandle(login: string): AccountHandle {
   const handle: AccountHandle = {
     app,
     auth: getAuth(app),
-    db: getFirestore(app),
+    db: makeDb(app),
   };
   handles.set(name, handle);
   return handle;
+}
+
+/**
+ * Baza z trwałą kolejką zapisów (IndexedDB): wyniki zapisane bez internetu czekają na urządzeniu
+ * i wysyłają się same — także po zamknięciu i ponownym otwarciu aplikacji.
+ */
+function makeDb(app: FirebaseApp): Firestore {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch {
+    // np. tryb prywatny bez IndexedDB albo baza już zainicjowana — zwykła pamięć podręczna
+    return getFirestore(app);
+  }
 }
 
 /**
@@ -164,19 +182,31 @@ export function describeAccountError(err: unknown): string {
     return 'Za dużo prób logowania. Odczekaj chwilę i spróbuj ponownie.';
   }
   if (code === 'auth/network-request-failed' || code === 'unavailable') {
-    return 'Brak połączenia z internetem. Wyniki zapiszą się lokalnie i zsynchronizują później.';
+    return 'Brak połączenia z internetem.';
   }
   if (code === 'resource-exhausted') {
-    return 'Baza wyników jest dziś przeciążona. Wyniki zapisują się na tym urządzeniu i wyślą się automatycznie później.';
+    return 'Baza wyników jest chwilowo przeciążona.';
   }
   if (code === 'permission-denied') {
-    return 'Brak uprawnień do tej operacji.';
+    return 'Baza odrzuciła zapis (brak uprawnień) — zwykle pomaga odświeżenie aplikacji.';
+  }
+  if (code === 'deadline-exceeded' || code === 'cancelled' || code === 'aborted') {
+    return 'Baza odpowiada zbyt wolno.';
+  }
+  if (code === 'auth/user-token-expired' || code === 'auth/user-disabled' || code === 'unauthenticated') {
+    return 'Sesja konta wygasła — zaloguję ponownie.';
+  }
+  if (code === 'auth/internal-error' || code === 'internal') {
+    return 'Chwilowy błąd serwera bazy.';
   }
   const msg = err instanceof Error ? err.message : String(err ?? '');
   if (/nie odpowiada/i.test(msg)) {
-    return 'Nie udało się połączyć z bazą. Sprawdź internet i spróbuj ponownie — wyniki zostają na tym urządzeniu.';
+    return 'Baza nie odpowiada — sprawdź internet.';
   }
-  return msg || 'Nie udało się połączyć z bazą.';
+  if (!navigator.onLine) return 'Brak internetu na tym urządzeniu.';
+  // Nasze własne, polskie komunikaty (np. „login zajęty”, „nie znaleziono grupy”) pokazujemy wprost.
+  if (msg && !/firebase|firestore|\(auth\/|^[a-z-]+\/[a-z-]+$/i.test(msg)) return msg;
+  return code ? `Nie udało się połączyć z bazą (kod: ${code}).` : 'Nie udało się połączyć z bazą.';
 }
 
 function accountDocPayload(uid: string, profile: UserProfile): Record<string, unknown> {

@@ -65,6 +65,7 @@ export default function App() {
     joinGroupCode,
     resetLocalData,
     accountSync,
+    retrySync,
     logoutAccount,
     loginToCloudAccount,
     createAccountWithCloud,
@@ -252,6 +253,7 @@ export default function App() {
                 profile={activeProfile}
                 state={accountSync[activeProfile.id]}
                 onSubmitPassword={setProfileCredentials}
+                onRetry={retrySync}
               />
             )}
             {activeSeries ? (
