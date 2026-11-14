@@ -78,6 +78,7 @@ export default function App() {
     updateSettings,
     recordCompletedSession,
     setActiveTheme,
+    deviceThemeId,
     saveCustomTheme,
     deleteCustomTheme,
     connectGoogleCloud,
@@ -121,8 +122,8 @@ export default function App() {
   });
 
   const activeTheme = useMemo(
-    () => resolveThemeById(activeProfile.activeThemeId, activeProfile.customThemes),
-    [activeProfile.activeThemeId, activeProfile.customThemes]
+    () => resolveThemeById(deviceThemeId, activeProfile.customThemes),
+    [deviceThemeId, activeProfile.customThemes]
   );
 
   const cssVars = useMemo(() => themeToCssVariables(activeTheme), [activeTheme]);

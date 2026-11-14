@@ -117,6 +117,7 @@ import type {
 } from '../types/math';
 
 const STORAGE_KEY = 'mistrz_tabliczki_store_v3';
+const DEVICE_THEMES_KEY = 'mt_device_themes';
 
 /** Przerywa operację, która nie odpowiada — dzięki temu UI nigdy nie wisi na „Łączenie…”. */
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -907,14 +908,36 @@ export function useAppStore() {
     []
   );
 
+  // Szablon kolorów jest zapamiętany NA TYM URZĄDZENIU (każde urządzenie może mieć swój).
+  // Nie trafia do chmury, więc synchronizacja nie przywraca wyboru z innego urządzenia.
+  const [deviceThemes, setDeviceThemes] = useState<Record<string, string>>(() => {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(DEVICE_THEMES_KEY) ?? '{}');
+      return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+      return {};
+    }
+  });
+  const setDeviceTheme = useCallback((profileId: string, themeId: string | null) => {
+    setDeviceThemes((prev) => {
+      const next = { ...prev };
+      if (themeId) next[profileId] = themeId;
+      else delete next[profileId];
+      try {
+        window.localStorage.setItem(DEVICE_THEMES_KEY, JSON.stringify(next));
+      } catch {
+        // brak miejsca — trudno
+      }
+      return next;
+    });
+  }, []);
+  const deviceThemesRef = useRef(deviceThemes);
+  deviceThemesRef.current = deviceThemes;
   const setActiveTheme = useCallback(
     (themeId: string) => {
-      updateActiveProfile((p) => ({
-        ...p,
-        activeThemeId: themeId,
-      }));
+      setDeviceTheme(storeRef.current.activeProfileId, themeId);
     },
-    [updateActiveProfile]
+    [setDeviceTheme]
   );
 
   const saveCustomTheme = useCallback(
@@ -927,11 +950,11 @@ export function useAppStore() {
         return {
           ...p,
           customThemes: updated,
-          activeThemeId: theme.id,
         };
       });
+      setDeviceTheme(storeRef.current.activeProfileId, theme.id);
     },
-    [updateActiveProfile]
+    [updateActiveProfile, setDeviceTheme]
   );
 
   const deleteCustomTheme = useCallback(
@@ -945,8 +968,10 @@ export function useAppStore() {
             p.activeThemeId === themeId ? DEFAULT_THEME_ID : p.activeThemeId,
         };
       });
+      const pid = storeRef.current.activeProfileId;
+      if (deviceThemesRef.current[pid] === themeId) setDeviceTheme(pid, null);
     },
-    [updateActiveProfile]
+    [updateActiveProfile, setDeviceTheme]
   );
 
   const setProfileCredentials = useCallback(
@@ -2095,6 +2120,7 @@ export function useAppStore() {
     updateSettings,
     recordCompletedSession,
     setActiveTheme,
+    deviceThemeId: deviceThemes[activeProfile.id] ?? activeProfile.activeThemeId,
     saveCustomTheme,
     deleteCustomTheme,
     connectGoogleCloud,
