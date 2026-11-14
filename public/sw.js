@@ -1,6 +1,6 @@
 /* Mistrz Tabliczki — service worker: aplikacja otwiera się szybko i działa bez internetu.
    Dane (Firebase) nie są tu buforowane — zawsze idą prosto do sieci. */
-const CACHE = 'mt-shell-v1';
+const CACHE = 'mt-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -25,7 +25,8 @@ self.addEventListener('fetch', (event) => {
   // Strona: najpierw sieć (świeża wersja), a bez internetu — kopia.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      // cache: 'no-store' — omija pamięć przeglądarki i CDN, więc zawsze dostajemy najnowszą wersję.
+      fetch(req, { cache: 'no-store' })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put('./index.html', copy));
