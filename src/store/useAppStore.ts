@@ -14,12 +14,21 @@ import {
   normalizeLogin,
   verifyAccountCredentials,
 } from '../engine/accountSecurity';
-import { mergeNotifications, mergeProfiles } from '../engine/cloudMerge';
+import {
+  type ArenaPlayerCard,
+  doesProfileNeedCloudPush,
+  mergeCompetitionProfiles,
+  mergeNotifications,
+  mergeProfiles,
+  sanitizeFirestoreId,
+} from '../engine/cloudMerge';
 import {
   type CloudSessionMeta,
   deleteProfileFromCloud,
   ensureCloudGroupForUser,
+  fetchArenaBoard,
   fetchGlobalSchoolDirectory,
+  getSchoolArenaBoardId,
   joinCloudGroupByCode,
   pushActiveProfileSelectionToCloud,
   pushGlobalSchoolDirectory,
@@ -28,7 +37,9 @@ import {
   pushProfileToCloud,
   signInWithGoogleCloud,
   signOutCloud,
+  subscribeToArenaBoard,
   subscribeToGroupCloud,
+  syncProfilesToArenaBoards,
 } from '../engine/cloudSync';
 import { generateSessionNotifications } from '../engine/familyNotifications';
 import {
@@ -39,7 +50,7 @@ import {
   saveLocalSchoolDirectory,
 } from '../engine/schoolDirectory';
 import { computeTournamentMedal, updateFactMemory } from '../engine/spacedRepetition';
-import { auth } from '../firebase';
+import { auth, formatFirebaseError } from '../firebase';
 import type {
   AppSettings,
   AvatarSpec,
@@ -51,6 +62,11 @@ import type {
 } from '../types/math';
 
 const STORAGE_KEY = 'mistrz_tabliczki_store_v3';
+const LEGACY_STORAGE_KEYS = [
+  'mistrz_tabliczki_store_v2',
+  'mistrz_tabliczki_store_v1',
+  'mistrz_tabliczki_store',
+];
 
 export type CloudSyncStatus = 'offline' | 'connecting' | 'synced' | 'error';
 
@@ -80,24 +96,64 @@ export const FALLBACK_GUEST_PROFILE: UserProfile = {
   customThemes: [],
 };
 
+function normalizeStoredProfile(raw: UserProfile): UserProfile {
+  const safeId = sanitizeFirestoreId(raw.id || 'user-1');
+  return {
+    ...raw,
+    id: safeId,
+    name: (raw.name || 'Mistrz').slice(0, 32),
+    avatarId: raw.avatarId || 'owl',
+    xp: Math.max(0, Number(raw.xp || 0)),
+    streakDays: Math.max(0, Number(raw.streakDays || 0)),
+    lastActiveDate: raw.lastActiveDate || '',
+    unlockedStageIds:
+      Array.isArray(raw.unlockedStageIds) && raw.unlockedStageIds.length > 0
+        ? raw.unlockedStageIds
+        : ['stage-1'],
+    completedStageIds: Array.isArray(raw.completedStageIds)
+      ? raw.completedStageIds
+      : [],
+    earnedBadges: Array.isArray(raw.earnedBadges) ? raw.earnedBadges : [],
+    memories: raw.memories ?? {},
+    sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
+    tournamentBests: raw.tournamentBests ?? {},
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(raw.settings ?? {}),
+    },
+    activeThemeId: raw.activeThemeId || DEFAULT_THEME_ID,
+    customThemes: Array.isArray(raw.customThemes) ? raw.customThemes : [],
+  };
+}
+
 export function parseInitialStoreState(raw: string | null): StoreState {
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as Partial<StoreState>;
       if (Array.isArray(parsed?.profiles) && parsed.profiles.length > 0) {
-        const validActive = parsed.profiles.some(
-          (p) => p.id === parsed.activeProfileId
-        )
-          ? (parsed.activeProfileId as string)
-          : parsed.profiles[0].id;
+        const idMap = new Map<string, string>();
+        const normalizedProfiles = parsed.profiles.map((p) => {
+          const norm = normalizeStoredProfile(p);
+          if (p.id) idMap.set(p.id, norm.id);
+          return norm;
+        });
+
+        const remappedActive = parsed.activeProfileId
+          ? idMap.get(parsed.activeProfileId) ?? parsed.activeProfileId
+          : '';
+        const validActive = normalizedProfiles.some((p) => p.id === remappedActive)
+          ? remappedActive
+          : normalizedProfiles[0].id;
+
         const owned = Array.isArray(parsed.ownedProfileIds)
-          ? parsed.ownedProfileIds.filter((id) =>
-              parsed.profiles!.some((p) => p.id === id)
-            )
-          : [validActive];
+          ? parsed.ownedProfileIds
+              .map((id) => idMap.get(id) ?? id)
+              .filter((id) => normalizedProfiles.some((p) => p.id === id))
+          : normalizedProfiles.map((p) => p.id);
+
         return {
           activeProfileId: validActive,
-          profiles: parsed.profiles,
+          profiles: normalizedProfiles,
           ownedProfileIds: owned.length > 0 ? owned : [validActive],
           hasSelectedProfile: Boolean(parsed.hasSelectedProfile),
           notifications: Array.isArray(parsed.notifications)
@@ -121,7 +177,23 @@ export function parseInitialStoreState(raw: string | null): StoreState {
 function loadInitialStore(): StoreState {
   if (typeof window !== 'undefined') {
     try {
-      return parseInitialStoreState(window.localStorage.getItem(STORAGE_KEY));
+      const currentRaw = window.localStorage.getItem(STORAGE_KEY);
+      if (currentRaw) {
+        const parsedCurrent = parseInitialStoreState(currentRaw);
+        if (parsedCurrent.profiles.length > 0) {
+          return parsedCurrent;
+        }
+      }
+      // Migrate older local versions without losing local progress, sessions, or passwords
+      for (const legacyKey of LEGACY_STORAGE_KEYS) {
+        const legacyRaw = window.localStorage.getItem(legacyKey);
+        if (!legacyRaw) continue;
+        const migrated = parseInitialStoreState(legacyRaw);
+        if (migrated.profiles.length > 0) {
+          return migrated;
+        }
+      }
+      return parseInitialStoreState(currentRaw);
     } catch {
       // Ignore storage error
     }
@@ -142,13 +214,20 @@ export function useAppStore() {
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [cloudSubVersion, setCloudSubVersion] = useState(0);
   const [remoteSchools, setRemoteSchools] = useState<SchoolDirectoryEntry[]>([]);
+  const [arenaPlayers, setArenaPlayers] = useState<ArenaPlayerCard[]>([]);
   const [localDirectorySeed, setLocalDirectorySeed] = useState<SchoolDirectoryEntry[]>(
     loadLocalSchoolDirectory
   );
+  const pushedFingerprintRef = useRef<Map<string, string>>(new Map());
+
+  const competitionProfiles = useMemo(
+    () => mergeCompetitionProfiles(store.profiles, arenaPlayers),
+    [store.profiles, arenaPlayers]
+  );
 
   const schoolDirectory = useMemo(
-    () => mergeSchoolDirectories([remoteSchools, localDirectorySeed], store.profiles),
-    [remoteSchools, localDirectorySeed, store.profiles]
+    () => mergeSchoolDirectories([remoteSchools, localDirectorySeed], competitionProfiles),
+    [remoteSchools, localDirectorySeed, competitionProfiles]
   );
   const schoolDirectoryRef = useRef<SchoolDirectoryEntry[]>(schoolDirectory);
   schoolDirectoryRef.current = schoolDirectory;
@@ -165,7 +244,7 @@ export function useAppStore() {
     saveLocalSchoolDirectory(schoolDirectory);
   }, [schoolDirectory]);
 
-  // Fetch non-PII global school & class directory on mount so new users see existing schools/classes
+  // Fetch non-PII global school & class directory + global arena scoreboard on mount
   useEffect(() => {
     let active = true;
     void fetchGlobalSchoolDirectory().then((entries) => {
@@ -173,20 +252,30 @@ export function useAppStore() {
         setRemoteSchools(entries);
       }
     });
+    void fetchArenaBoard('global').then((players) => {
+      if (active && players.length > 0) {
+        setArenaPlayers(players);
+      }
+    });
     return () => {
       active = false;
     };
   }, []);
 
-  // Listen to Firebase Auth state & sync family workspace
+  // Listen to Firebase Auth state & sync user workspace + non-PII school/class arena boards
   useEffect(() => {
     let unsubCloud: (() => void) | null = null;
+    let unsubGlobalArena: (() => void) | null = null;
     let cancelled = false;
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (unsubCloud) {
         unsubCloud();
         unsubCloud = null;
+      }
+      if (unsubGlobalArena) {
+        unsubGlobalArena();
+        unsubGlobalArena = null;
       }
 
       if (!user) {
@@ -210,15 +299,33 @@ export function useAppStore() {
         setCloudMeta(meta);
         cloudMetaRef.current = meta;
         setCloudStatus('synced');
+
         if (schoolDirectoryRef.current.length > 0) {
           void pushGlobalSchoolDirectory(schoolDirectoryRef.current);
         }
+        if (snapshot.profiles.length > 0) {
+          void syncProfilesToArenaBoards(user.uid, snapshot.profiles);
+        }
+
+        unsubGlobalArena = subscribeToArenaBoard('global', (players) => {
+          setArenaPlayers((prev) => {
+            const byId = new Map(prev.map((p) => [p.profileId, p]));
+            for (const p of players) {
+              byId.set(p.profileId, p);
+            }
+            return Array.from(byId.values());
+          });
+        });
 
         unsubCloud = subscribeToGroupCloud({
           groupId: meta.groupId,
           onProfilesSnapshot: (cloudProfiles) => {
+            const cloudById = new Map(cloudProfiles.map((p) => [p.id, p]));
+            let mergedForSync: UserProfile[] = [];
+
             setStore((prev) => {
               const merged = mergeProfiles(prev.profiles, cloudProfiles);
+              mergedForSync = merged;
               const ownedSet = new Set(prev.ownedProfileIds);
               for (const prof of merged) {
                 if (prof.ownerUid === user.uid) {
@@ -241,6 +348,32 @@ export function useAppStore() {
                 ),
               };
             });
+
+            // Push back any local progress, accounts, or local passwordHash not yet on cloud
+            for (const prof of mergedForSync) {
+              const cloudCopy = cloudById.get(prof.id);
+              if (doesProfileNeedCloudPush(prof, cloudCopy)) {
+                const fp = `${prof.xp}:${prof.sessions.length}:${prof.passwordHash ?? ''}:${prof.schoolName ?? ''}:${prof.className ?? ''}`;
+                if (pushedFingerprintRef.current.get(prof.id) !== fp) {
+                  pushedFingerprintRef.current.set(prof.id, fp);
+                  void pushProfileToCloud(meta.groupId, user.uid, {
+                    ...prof,
+                    ownerUid: prof.ownerUid || user.uid,
+                  }).catch(() => {});
+                }
+              }
+            }
+
+            if (mergedForSync.length > 0) {
+              void syncProfilesToArenaBoards(user.uid, mergedForSync);
+              const nextDir = mergeSchoolDirectories(
+                [schoolDirectoryRef.current],
+                mergedForSync
+              );
+              if (nextDir.length > 0) {
+                void pushGlobalSchoolDirectory(nextDir);
+              }
+            }
           },
           onFeedSnapshot: (cloudNotifs) => {
             setStore((prev) => ({
@@ -248,18 +381,15 @@ export function useAppStore() {
               notifications: mergeNotifications(prev.notifications, cloudNotifs),
             }));
           },
-          onError: () => {
+          onError: (err) => {
             setCloudStatus('error');
+            setCloudError(formatFirebaseError(err));
           },
         });
       } catch (err) {
         if (cancelled) return;
         setCloudStatus('error');
-        setCloudError(
-          err instanceof Error
-            ? err.message
-            : 'Nie udało się połączyć z synchronizacją w chmurze.'
-        );
+        setCloudError(formatFirebaseError(err));
       }
     });
 
@@ -267,6 +397,7 @@ export function useAppStore() {
       cancelled = true;
       unsubAuth();
       if (unsubCloud) unsubCloud();
+      if (unsubGlobalArena) unsubGlobalArena();
     };
   }, [cloudSubVersion]);
 
@@ -278,6 +409,23 @@ export function useAppStore() {
     [store.profiles, store.activeProfileId]
   );
 
+  // Subscribe to the active user's school-specific arena board so whole school & classes appear live
+  useEffect(() => {
+    const school = activeProfile.schoolName?.trim();
+    if (!school || cloudStatus !== 'synced') return;
+    const schoolBoardId = getSchoolArenaBoardId(school);
+    const unsubSchoolBoard = subscribeToArenaBoard(schoolBoardId, (players) => {
+      setArenaPlayers((prev) => {
+        const byId = new Map(prev.map((p) => [p.profileId, p]));
+        for (const p of players) {
+          byId.set(p.profileId, p);
+        }
+        return Array.from(byId.values());
+      });
+    });
+    return () => unsubSchoolBoard();
+  }, [activeProfile.schoolName, cloudStatus]);
+
   // Only accounts belonging to THIS user/device appear on the Welcome Gate & Konto switcher
   const ownedProfiles = useMemo(
     () => store.profiles.filter((p) => store.ownedProfileIds.includes(p.id)),
@@ -288,6 +436,7 @@ export function useAppStore() {
     const meta = cloudMetaRef.current;
     if (!meta) return;
     void pushProfileToCloud(meta.groupId, meta.uid, profile).catch(() => {});
+    void syncProfilesToArenaBoards(meta.uid, [profile]);
   }, []);
 
   const updateActiveProfile = useCallback(
@@ -433,6 +582,7 @@ export function useAppStore() {
                 nextProfiles.map((p) => p.id)
               )
             )
+            .then(() => syncProfilesToArenaBoards(meta.uid, [created]))
             .catch(() => {});
         }
         return {
@@ -660,6 +810,7 @@ export function useAppStore() {
         const meta = cloudMetaRef.current;
         if (meta) {
           void pushProfileToCloud(meta.groupId, meta.uid, activeAfter).catch(() => {});
+          void syncProfilesToArenaBoards(meta.uid, [activeAfter]);
           if (freshAlerts.length > 0) {
             void pushNotificationsFeedToCloud(
               meta.groupId,
@@ -815,11 +966,7 @@ export function useAppStore() {
       await signInWithGoogleCloud();
     } catch (err) {
       setCloudStatus('error');
-      setCloudError(
-        err instanceof Error
-          ? err.message
-          : 'Logowanie przez Google zostało anulowane lub zablokowane.'
-      );
+      setCloudError(formatFirebaseError(err));
     }
   }, []);
 
@@ -856,11 +1003,11 @@ export function useAppStore() {
           await pushProfileToCloud(meta.groupId, meta.uid, tagged);
         }
         if (ownedList.length > 0) {
-          // Merge existing remote profileIds with local owned profileIds cleanly
           const allIds = Array.from(
             new Set([...existingProfileIds, ...ownedList.map((p) => p.id)])
           );
           await pushGroupProfileIds(meta.groupId, allIds).catch(() => {});
+          void syncProfilesToArenaBoards(meta.uid, ownedList);
         }
 
         setCloudMeta(meta);
@@ -871,10 +1018,7 @@ export function useAppStore() {
       } catch (err) {
         return {
           ok: false,
-          error:
-            err instanceof Error
-              ? err.message
-              : 'Nie udało się dołączyć do grupy tym kodem.',
+          error: formatFirebaseError(err),
         };
       }
     },
@@ -893,6 +1037,7 @@ export function useAppStore() {
 
   return {
     profiles: store.profiles,
+    competitionProfiles,
     ownedProfiles,
     activeProfile,
     hasSelectedProfile: store.hasSelectedProfile,

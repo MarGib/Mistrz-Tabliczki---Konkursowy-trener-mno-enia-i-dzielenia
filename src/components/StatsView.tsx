@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Cloud,
   Crown,
   GraduationCap,
   Lock,
@@ -26,6 +27,7 @@ import {
   getDueFactCount,
   getSlowestFacts,
 } from '../engine/spacedRepetition';
+import type { CloudSyncStatus } from '../store/useAppStore';
 import type { ActiveSeriesConfig, FactMemory, UserProfile } from '../types/math';
 import { AvatarDisplay } from './AvatarDisplay';
 import { ProgressTrendChart } from './ProgressTrendChart';
@@ -33,6 +35,10 @@ import { ProgressTrendChart } from './ProgressTrendChart';
 interface StatsViewProps {
   profile: UserProfile;
   profiles: UserProfile[];
+  trendProfiles?: UserProfile[];
+  cloudStatus?: CloudSyncStatus;
+  cloudError?: string | null;
+  onConnectGoogle?: () => void;
   isDark?: boolean;
   onStartFocusedDrill: (config: ActiveSeriesConfig) => void;
 }
@@ -48,6 +54,10 @@ const MASTERY_LABELS: Record<FactMemory['mastery'], string> = {
 export function StatsView({
   profile,
   profiles,
+  trendProfiles,
+  cloudStatus = 'offline',
+  cloudError = null,
+  onConnectGoogle,
   isDark = false,
   onStartFocusedDrill,
 }: StatsViewProps) {
@@ -55,6 +65,7 @@ export function StatsView({
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   const familySummary = useMemo(() => computeFamilySummary(profiles), [profiles]);
+  const chartProfiles = trendProfiles ?? profiles;
   const diagnostics = useMemo(
     () => buildPlayerDiagnostics(profile.memories),
     [profile.memories]
@@ -135,6 +146,26 @@ export function StatsView({
           </button>
         )}
       </div>
+
+      {cloudStatus !== 'synced' && onConnectGoogle && (
+        <div className="bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm text-[var(--th-text)]">
+            <strong className="font-bold">Tryb lokalny (offline):</strong> połącz konto Google, aby Twoje wyniki oraz szkoła i klasa synchronizowały się z bazą online i brały udział w rankingu szkół.
+            {cloudError && (
+              <span className="block mt-1 text-xs font-bold text-red-500">{cloudError}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onConnectGoogle}
+            disabled={cloudStatus === 'connecting'}
+            className="min-h-[40px] px-4 py-2 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-bold text-xs sm:text-sm border-b-3 border-[var(--th-primary-dark)] inline-flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-60"
+          >
+            <Cloud className="w-4 h-4" aria-hidden="true" />
+            <span>{cloudStatus === 'connecting' ? 'Łączenie...' : 'Połącz z Google'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Group / Class Mutual Leaderboard & Aggregate Metrics */}
       <section
@@ -443,7 +474,7 @@ export function StatsView({
           </p>
 
           <ProgressTrendChart
-            profiles={profiles}
+            profiles={chartProfiles}
             activeProfileId={profile.id}
             isDark={isDark}
           />

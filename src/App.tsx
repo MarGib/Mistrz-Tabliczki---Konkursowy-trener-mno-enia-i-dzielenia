@@ -28,6 +28,7 @@ function detectCurrentDevice(): DeviceProfile {
 export default function App() {
   const {
     profiles,
+    competitionProfiles,
     ownedProfiles,
     activeProfile,
     hasSelectedProfile,
@@ -147,6 +148,7 @@ export default function App() {
           hasGroupAccounts={profiles.length > 0}
           schoolDirectory={schoolDirectory}
           device={device}
+          cloudMeta={cloudMeta}
           cloudStatus={cloudStatus}
           cloudError={cloudError}
           onSelectProfile={(id) => {
@@ -217,13 +219,20 @@ export default function App() {
             ) : activeTab === 'turnieje' ? (
               <TournamentsView
                 profile={activeProfile}
-                profiles={profiles}
+                profiles={competitionProfiles}
+                cloudStatus={cloudStatus}
+                cloudError={cloudError}
+                onConnectGoogle={connectGoogleCloud}
                 onStartTournament={(cfg) => setActiveSeries(cfg)}
               />
             ) : activeTab === 'statystyki' ? (
               <StatsView
                 profile={activeProfile}
-                profiles={profiles}
+                profiles={competitionProfiles}
+                trendProfiles={profiles}
+                cloudStatus={cloudStatus}
+                cloudError={cloudError}
+                onConnectGoogle={connectGoogleCloud}
                 isDark={activeTheme.tokens.isDark}
                 onStartFocusedDrill={(cfg) => setActiveSeries(cfg)}
               />

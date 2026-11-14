@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import { Award, Clock, Medal, Play, Target, Trophy } from 'lucide-react';
+import { Award, Clock, Cloud, Medal, Play, Target, Trophy } from 'lucide-react';
 import trophyImg from '../assets/images/trophy_contest_cup_1794652990997.jpg';
 import { TOURNAMENTS } from '../data/curriculum';
+import type { CloudSyncStatus } from '../store/useAppStore';
 import type { ActiveSeriesConfig, MedalTier, UserProfile } from '../types/math';
 
 interface TournamentsViewProps {
   profile: UserProfile;
   profiles: UserProfile[];
+  cloudStatus?: CloudSyncStatus;
+  cloudError?: string | null;
+  onConnectGoogle?: () => void;
   onStartTournament: (config: ActiveSeriesConfig) => void;
 }
 
@@ -23,6 +27,9 @@ type TourneyScope = 'all' | 'group' | 'school' | 'class';
 export function TournamentsView({
   profile,
   profiles,
+  cloudStatus = 'offline',
+  cloudError = null,
+  onConnectGoogle,
   onStartTournament,
 }: TournamentsViewProps) {
   const [selectedTourneyId, setSelectedTourneyId] = useState<string>(TOURNAMENTS[0].id);
@@ -110,6 +117,26 @@ export function TournamentsView({
           </p>
         </div>
       </section>
+
+      {cloudStatus !== 'synced' && onConnectGoogle && (
+        <div className="bg-[var(--th-soft-tint)] border border-[var(--th-soft-tint-border)] rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm text-[var(--th-text)]">
+            <strong className="font-bold">Turnieje szkolne i klasowe online:</strong> połącz konto Google, aby wysłać swoje medale do tabeli klasy oraz szkoły i rywalizować z innymi uczniami.
+            {cloudError && (
+              <span className="block mt-1 text-xs font-bold text-red-500">{cloudError}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onConnectGoogle}
+            disabled={cloudStatus === 'connecting'}
+            className="min-h-[40px] px-4 py-2 rounded-xl bg-[var(--th-primary)] hover:bg-[var(--th-primary-hover)] text-[var(--th-primary-fg)] font-bold text-xs sm:text-sm border-b-3 border-[var(--th-primary-dark)] inline-flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-60"
+          >
+            <Cloud className="w-4 h-4" aria-hidden="true" />
+            <span>{cloudStatus === 'connecting' ? 'Łączenie...' : 'Połącz z Google'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Tournament Cards + Live Leaderboard Split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

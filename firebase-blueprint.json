@@ -296,6 +296,34 @@
         }
       },
       "required": ["schools", "updatedAt"]
+    },
+    "ArenaBoard": {
+      "title": "ArenaBoard",
+      "description": "Non-PII competition scoreboard (global or per-school) storing public player scorecards (no email, no login, no passwordHash) for school and class rankings.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "players": {
+          "type": "array",
+          "description": "Bounded list (max 100) of non-PII player scorecard objects."
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "players", "updatedByUid", "updatedAt"]
     }
   },
   "firestore": {
@@ -326,6 +354,10 @@
     "/schoolDirectory/{directoryId}": {
       "schema": { "$ref": "#/entities/SchoolDirectory" },
       "description": "Non-PII directory document ('global') listing existing school names and class labels."
+    },
+    "/arenaBoards/{boardId}": {
+      "schema": { "$ref": "#/entities/ArenaBoard" },
+      "description": "Non-PII global and per-school competition scoreboard for inter-class and inter-school rankings."
     }
   }
 }

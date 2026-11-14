@@ -620,4 +620,49 @@ test('reviewCalendar and diagnostics highlight weak/slow/strong facts and 7-day 
   assert.equal(reminder!.urgentCount, 1);
 });
 
+import {
+  doesProfileNeedCloudPush,
+  mergeCompetitionProfiles,
+  mergeSingleProfile,
+  profileToArenaPlayerCard,
+} from './cloudMerge';
+
+test('cloudMerge preserves local passwordHash, detects cloud push needed, and builds non-PII arena scorecards', () => {
+  const localOla = createFreshProfile('Ola', 'owl', 1700000000000, undefined, 'SP nr 5', '4a');
+  localOla.xp = 420;
+  localOla.login = 'ola';
+  localOla.passwordHash = hashAccountPassword('hasloOla', localOla.id);
+
+  const cloudOlaStale: UserProfile = {
+    ...localOla,
+    xp: 200,
+    passwordHash: undefined,
+    login: undefined,
+  };
+
+  const merged = mergeSingleProfile(localOla, cloudOlaStale);
+  assert.equal(merged.xp, 420);
+  assert.equal(merged.passwordHash, localOla.passwordHash);
+  assert.equal(merged.login, 'ola');
+  assert.equal(doesProfileNeedCloudPush(merged, cloudOlaStale), true);
+
+  const sanitized = sanitizeProfileForFirestore(merged, 'grp-u1', 'u1');
+  assert.equal(sanitized.passwordHash, localOla.passwordHash);
+  assert.ok(sanitized.settings && typeof sanitized.settings === 'object');
+
+  const externalCard = profileToArenaPlayerCard({
+    ...createFreshProfile('Antek', 'mascot-fox', 1700000000999, undefined, 'SP nr 5', '4a'),
+    xp: 310,
+    login: 'antek',
+    passwordHash: 'secret-should-not-leak',
+  });
+  assert.equal((externalCard as unknown as Record<string, unknown>).passwordHash, undefined);
+  assert.equal((externalCard as unknown as Record<string, unknown>).login, undefined);
+
+  const combined = mergeCompetitionProfiles([merged], [externalCard]);
+  assert.equal(combined.length, 2);
+  const summary = computeFamilySummary(combined);
+  assert.equal(summary.classStandings[0].totalXp, 730);
+  assert.equal(summary.classStandings[0].membersCount, 2);
+});
 

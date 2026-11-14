@@ -1,40 +1,24 @@
 import { initializeApp } from 'firebase/app';
 import { GoogleAuthProvider, getAuth } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
 
-type FirebaseAppletConfig = {
-  apiKey: string;
-  authDomain?: string;
-  projectId: string;
-  storageBucket?: string;
-  messagingSenderId?: string;
-  appId: string;
-  measurementId?: string;
-  firestoreDatabaseId?: string;
-};
-
-// Plik firebase-applet-config.json nie jest w repozytorium (generuje go AI Studio).
-// W GitHub Actions tworzy go workflow z sekretu FIREBASE_APPLET_CONFIG.
-// Gdy go brak, aplikacja działa w trybie lokalnym (bez logowania i synchronizacji w chmurze).
-const configModules = import.meta.glob<{ default: FirebaseAppletConfig }>(
-  '../firebase-applet-config.json',
-  { eager: true }
-);
-const loadedConfig = Object.values(configModules)[0]?.default;
-
-export const isFirebaseConfigured = Boolean(loadedConfig?.apiKey && loadedConfig?.projectId);
-
-const firebaseConfig: FirebaseAppletConfig = loadedConfig ?? {
-  apiKey: 'not-configured',
-  authDomain: 'not-configured.firebaseapp.com',
-  projectId: 'not-configured',
-  appId: 'not-configured',
-};
+export function isFirebaseConfigured(): boolean {
+  return Boolean(
+    firebaseConfig &&
+      typeof firebaseConfig.apiKey === 'string' &&
+      firebaseConfig.apiKey.length > 0 &&
+      typeof firebaseConfig.projectId === 'string' &&
+      firebaseConfig.projectId.length > 0 &&
+      firebaseConfig.projectId !== 'remixed-project-id'
+  );
+}
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export enum OperationType {
   CREATE = 'create',
@@ -60,6 +44,57 @@ export interface FirestoreErrorInfo {
       email?: string | null;
     }[];
   };
+}
+
+export function formatFirebaseError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+
+  const combined = `${code} ${raw}`.toLowerCase();
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+
+  if (combined.includes('auth/unauthorized-domain')) {
+    return `Domena "${host || 'ta strona'}" nie jest dodana w Firebase Console → Authentication → Settings → Authorized domains.`;
+  }
+  if (combined.includes('auth/popup-blocked')) {
+    return 'Przeglądarka zablokowała okno logowania Google. Zezwól na wyskakujące okna dla tej strony i spróbuj ponownie.';
+  }
+  if (
+    combined.includes('auth/popup-closed-by-user') ||
+    combined.includes('auth/cancelled-popup-request')
+  ) {
+    return 'Okno logowania Google zostało zamknięte przed zakończeniem.';
+  }
+  if (combined.includes('auth/operation-not-allowed')) {
+    return 'Logowanie Google nie jest jeszcze włączone w Firebase Authentication dla tego projektu.';
+  }
+  if (
+    combined.includes('auth/network-request-failed') ||
+    combined.includes('the client is offline')
+  ) {
+    return 'Brak połączenia z siecią. Twoje lokalne wyniki i hasło są bezpieczne — zsynchronizują się po powrocie internetu.';
+  }
+  if (
+    combined.includes('permission-denied') ||
+    combined.includes('missing or insufficient permissions')
+  ) {
+    return 'Brak uprawnień Firestore — sprawdź, czy reguły firestore.rules zostały wdrożone do projektu Firebase i konto Google jest zweryfikowane.';
+  }
+  if (combined.includes('quota exceeded')) {
+    return 'Przekroczono dzienny darmowy limit odczytów Firestore. Lokalne wyniki działają dalej bez przeszkód.';
+  }
+  if (raw.startsWith('{') && raw.includes('"operationType"')) {
+    try {
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed.error) return formatFirebaseError(new Error(parsed.error));
+    } catch {
+      // ignore JSON parse failure
+    }
+  }
+  return raw || 'Wystąpił błąd połączenia z bazą Firebase.';
 }
 
 export function handleFirestoreError(
@@ -89,9 +124,10 @@ export function handleFirestoreError(
 }
 
 async function testConnection() {
-  if (typeof window === 'undefined' || !isFirebaseConfigured) return;
+  if (typeof window === 'undefined' || !isFirebaseConfigured()) return;
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    // Query a permitted non-PII document path to validate server connectivity cleanly
+    await getDocFromServer(doc(db, 'schoolDirectory', 'global'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error('Please check your Firebase configuration.');

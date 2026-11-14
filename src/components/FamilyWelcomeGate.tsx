@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
+  CheckCircle2,
   Cloud,
   KeyRound,
   Lock,
@@ -17,6 +18,7 @@ import {
   normalizeLogin,
   verifyAccountCredentials,
 } from '../engine/accountSecurity';
+import type { CloudSessionMeta } from '../engine/cloudSync';
 import type { SchoolDirectoryEntry } from '../engine/schoolDirectory';
 import { computeUserLevel } from '../engine/spacedRepetition';
 import type { CloudSyncStatus } from '../store/useAppStore';
@@ -29,6 +31,7 @@ interface FamilyWelcomeGateProps {
   hasGroupAccounts: boolean;
   schoolDirectory: SchoolDirectoryEntry[];
   device: DeviceProfile;
+  cloudMeta?: CloudSessionMeta | null;
   cloudStatus: CloudSyncStatus;
   cloudError: string | null;
   onSelectProfile: (profileId: string) => void;
@@ -56,6 +59,7 @@ export function FamilyWelcomeGate({
   hasGroupAccounts,
   schoolDirectory,
   device,
+  cloudMeta = null,
   cloudStatus,
   cloudError,
   onSelectProfile,
@@ -87,6 +91,13 @@ export function FamilyWelcomeGate({
   const [existingLogin, setExistingLogin] = useState('');
   const [existingPassword, setExistingPassword] = useState('');
   const [existingError, setExistingError] = useState<string | null>(null);
+
+  // Automatically show restored cloud accounts as soon as Google sign-in loads them
+  useEffect(() => {
+    if (cloudStatus === 'synced' && ownedProfiles.length > 0 && mode === 'existing') {
+      setMode('list');
+    }
+  }, [cloudStatus, ownedProfiles.length, mode]);
 
   const selectedMember = ownedProfiles.find((p) => p.id === selectedMemberId) ?? null;
   const activeMode: GateMode =
@@ -556,6 +567,40 @@ export function FamilyWelcomeGate({
                 >
                   Utwórz konto i zacznij trening (0 XP)
                 </button>
+
+                <div className="pt-3 border-t border-[var(--th-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  {cloudMeta ? (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-[var(--th-primary)]">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        Baza online połączona ({cloudMeta.displayName}) — szkoła, klasa i hasło zapiszą się w chmurze.
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-[var(--th-text-muted)] leading-snug">
+                        Chcesz rywalizować z kolegami ze szkoły i zapisać wyniki oraz hasło w chmurze?
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onConnectGoogle}
+                        disabled={cloudStatus === 'connecting'}
+                        data-testid="welcome-create-google-btn"
+                        className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[var(--th-surface-muted)] hover:border-[var(--th-primary)] border border-[var(--th-border)] text-xs font-bold text-[var(--th-text)] inline-flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-60"
+                      >
+                        <Cloud className="w-3.5 h-3.5 text-[var(--th-primary)]" aria-hidden="true" />
+                        <span>
+                          {cloudStatus === 'connecting' ? 'Łączenie...' : 'Połącz z Google'}
+                        </span>
+                      </button>
+                    </>
+                  )}
+                </div>
+                {cloudError && !cloudMeta && (
+                  <p className="text-xs font-bold text-red-500" role="alert">
+                    {cloudError}
+                  </p>
+                )}
               </form>
             )}
 

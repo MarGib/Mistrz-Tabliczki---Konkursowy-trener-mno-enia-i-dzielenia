@@ -155,6 +155,36 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidArenaPlayer(p) {
+      return p is map &&
+        p.keys().hasAll(['profileId', 'name', 'avatarId', 'xp', 'streakDays', 'solvedTasks', 'accuracyPct', 'sessionsCount', 'tournamentBests', 'updatedAtMs']) &&
+        p.keys().hasOnly(['profileId', 'name', 'schoolName', 'className', 'avatarId', 'customAvatarSpec', 'xp', 'streakDays', 'solvedTasks', 'accuracyPct', 'avgTimeSec', 'sessionsCount', 'tournamentBests', 'updatedAtMs']) &&
+        p.profileId is string && isValidId(p.profileId) && p.profileId.size() <= 64 &&
+        p.name is string && p.name.size() >= 1 && p.name.size() <= 32 &&
+        (!('schoolName' in p) || (p.schoolName is string && p.schoolName.size() <= 64)) &&
+        (!('className' in p) || (p.className is string && p.className.size() <= 24)) &&
+        p.avatarId is string && p.avatarId.size() >= 1 && p.avatarId.size() <= 32 &&
+        (!('customAvatarSpec' in p) || p.customAvatarSpec is map) &&
+        p.xp is number && p.xp >= 0 && p.xp <= 10000000 &&
+        p.streakDays is number && p.streakDays >= 0 && p.streakDays <= 36500 &&
+        p.solvedTasks is number && p.solvedTasks >= 0 && p.solvedTasks <= 1000000 &&
+        p.accuracyPct is number && p.accuracyPct >= 0 && p.accuracyPct <= 100 &&
+        (!('avgTimeSec' in p) || (p.avgTimeSec is number && p.avgTimeSec >= 0 && p.avgTimeSec <= 300)) &&
+        p.sessionsCount is number && p.sessionsCount >= 0 && p.sessionsCount <= 100000 &&
+        p.tournamentBests is map &&
+        p.updatedAtMs is number && p.updatedAtMs >= 0;
+    }
+
+    function isValidArenaBoard(data, boardId) {
+      return data.keys().hasAll(['id', 'players', 'updatedByUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'players', 'updatedByUid', 'updatedAt']) &&
+        data.id is string && data.id == boardId && isValidId(data.id) &&
+        data.players is list && data.players.size() <= 100 &&
+        (data.players.size() == 0 || isValidArenaPlayer(data.players[0])) &&
+        data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid) &&
+        data.updatedAt is timestamp;
+    }
+
     // 1. Private user pointers
     match /users/{userId} {
       allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
@@ -267,6 +297,16 @@ service cloud.firestore {
       allow list: if false;
       allow create, update: if isVerifiedUser() && directoryId == 'global' &&
         isValidSchoolDirectory(incoming()) &&
+        incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 5. Non-PII global and per-school competition scoreboards (no PII, exact board lookup only)
+    match /arenaBoards/{boardId} {
+      allow get: if isValidId(boardId) && (boardId == 'global' || isVerifiedUser());
+      allow list: if false;
+      allow create, update: if isVerifiedUser() && isValidId(boardId) &&
+        isValidArenaBoard(incoming(), boardId) &&
         incoming().updatedAt == request.time;
       allow delete: if false;
     }

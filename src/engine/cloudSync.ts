@@ -9,15 +9,30 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
-import { OperationType, auth, db, googleProvider, handleFirestoreError, isFirebaseConfigured } from '../firebase';
+import { DEFAULT_SETTINGS } from '../data/curriculum';
+import { DEFAULT_THEME_ID } from '../data/themes';
+import {
+  OperationType,
+  auth,
+  db,
+  googleProvider,
+  handleFirestoreError,
+  isFirebaseConfigured,
+} from '../firebase';
 import type { FamilyNotification, UserProfile } from '../types/math';
 import {
+  type ArenaPlayerCard,
+  doesProfileNeedCloudPush,
   generateJoinCode,
+  mergeSingleProfile,
+  profileToArenaPlayerCard,
+  sanitizeFirestoreId,
   sanitizeProfileForFirestore,
   stripUndefinedDeep,
 } from './cloudMerge';
@@ -36,8 +51,8 @@ export interface CloudSessionMeta {
 }
 
 export async function signInWithGoogleCloud(): Promise<User> {
-  if (!isFirebaseConfigured) {
-    throw new Error('Logowanie i synchronizacja w chmurze są niedostępne w tej wersji strony.');
+  if (!isFirebaseConfigured()) {
+    throw new Error('Brak konfiguracji Firebase (firebase-applet-config.json).');
   }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
@@ -71,12 +86,122 @@ function docToUserProfile(data: Record<string, unknown>): UserProfile {
     memories: (data.memories as UserProfile['memories']) ?? {},
     sessions: Array.isArray(data.sessions) ? (data.sessions as UserProfile['sessions']) : [],
     tournamentBests: (data.tournamentBests as UserProfile['tournamentBests']) ?? {},
-    settings: data.settings as UserProfile['settings'],
-    activeThemeId: typeof data.activeThemeId === 'string' ? data.activeThemeId : undefined,
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...((data.settings as Partial<UserProfile['settings']>) ?? {}),
+    },
+    activeThemeId:
+      typeof data.activeThemeId === 'string' && data.activeThemeId.length > 0
+        ? data.activeThemeId
+        : DEFAULT_THEME_ID,
     customThemes: Array.isArray(data.customThemes)
       ? (data.customThemes as UserProfile['customThemes'])
       : [],
   };
+}
+
+function parseArenaPlayers(rawPlayers: unknown): ArenaPlayerCard[] {
+  if (!Array.isArray(rawPlayers)) return [];
+  return rawPlayers
+    .filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(item) &&
+        typeof item === 'object' &&
+        typeof (item as { profileId?: unknown }).profileId === 'string' &&
+        typeof (item as { name?: unknown }).name === 'string'
+    )
+    .map((item) => ({
+      profileId: sanitizeFirestoreId(String(item.profileId)),
+      name: String(item.name).slice(0, 32),
+      schoolName: typeof item.schoolName === 'string' ? item.schoolName : undefined,
+      className: typeof item.className === 'string' ? item.className : undefined,
+      avatarId: typeof item.avatarId === 'string' ? item.avatarId : 'owl',
+      customAvatarSpec: item.customAvatarSpec as ArenaPlayerCard['customAvatarSpec'],
+      xp: Number(item.xp ?? 0),
+      streakDays: Number(item.streakDays ?? 0),
+      solvedTasks: Number(item.solvedTasks ?? 0),
+      accuracyPct: Number(item.accuracyPct ?? 0),
+      avgTimeSec: typeof item.avgTimeSec === 'number' ? item.avgTimeSec : undefined,
+      sessionsCount: Number(item.sessionsCount ?? 0),
+      tournamentBests:
+        (item.tournamentBests as ArenaPlayerCard['tournamentBests']) ?? {},
+      updatedAtMs: Number(item.updatedAtMs ?? 0),
+    }));
+}
+
+async function reconcileLocalProfilesIntoGroup(
+  groupId: string,
+  uid: string,
+  remoteIds: string[],
+  localProfiles: UserProfile[]
+): Promise<void> {
+  if (localProfiles.length === 0) return;
+
+  const localById = new Map(
+    localProfiles.slice(0, 50).map((p) => [sanitizeFirestoreId(p.id), p])
+  );
+  const remoteIdSet = new Set(remoteIds);
+  const toPush: UserProfile[] = [];
+
+  // Fetch existing cloud copies for overlapping IDs so we merge instead of overwriting newer cloud stats
+  const overlappingIds = Array.from(localById.keys()).filter((id) =>
+    remoteIdSet.has(id)
+  );
+  const cloudById = new Map<string, UserProfile>();
+  if (overlappingIds.length > 0) {
+    const snaps = await Promise.all(
+      overlappingIds.map((pid) =>
+        getDoc(doc(db, 'groups', groupId, 'profiles', pid)).catch(() => null)
+      )
+    );
+    snaps.forEach((snap, idx) => {
+      if (snap && snap.exists()) {
+        cloudById.set(overlappingIds[idx], docToUserProfile(snap.data()));
+      }
+    });
+  }
+
+  for (const [pid, localProf] of localById.entries()) {
+    const taggedLocal: UserProfile = {
+      ...localProf,
+      id: pid,
+      ownerUid: localProf.ownerUid || uid,
+    };
+    const cloudProf = cloudById.get(pid);
+    if (!cloudProf) {
+      toPush.push(taggedLocal);
+    } else {
+      const merged = mergeSingleProfile(taggedLocal, cloudProf);
+      if (doesProfileNeedCloudPush(merged, cloudProf)) {
+        toPush.push(merged);
+      }
+    }
+  }
+
+  if (toPush.length > 0) {
+    const batch = writeBatch(db);
+    for (const prof of toPush) {
+      batch.set(doc(db, 'groups', groupId, 'profiles', prof.id), {
+        ...sanitizeProfileForFirestore(prof, groupId, uid),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  const missingRemoteIds = Array.from(localById.keys()).filter(
+    (id) => !remoteIdSet.has(id)
+  );
+  if (missingRemoteIds.length > 0) {
+    const nextIds = Array.from(new Set([...remoteIds, ...missingRemoteIds])).slice(
+      0,
+      50
+    );
+    await updateDoc(doc(db, 'groups', groupId), {
+      profileIds: nextIds,
+      updatedAt: serverTimestamp(),
+    });
+  }
 }
 
 export async function ensureCloudGroupForUser(
@@ -102,9 +227,17 @@ export async function ensureCloudGroupForUser(
     const groupPath = `groups/${groupId}`;
     try {
       const grpSnap = await getDoc(doc(db, 'groups', groupId));
+      const remoteIds =
+        grpSnap.exists() && Array.isArray(grpSnap.data().profileIds)
+          ? (grpSnap.data().profileIds as string[]).filter((id) => typeof id === 'string')
+          : [];
       const joinCode = grpSnap.exists()
         ? String(grpSnap.data().joinCode ?? generateJoinCode(uid))
         : generateJoinCode(uid);
+
+      // Silently reconcile any existing local progress / accounts / passwords into Firestore
+      await reconcileLocalProfilesIntoGroup(groupId, uid, remoteIds, localProfiles);
+
       return {
         uid,
         displayName,
@@ -120,7 +253,13 @@ export async function ensureCloudGroupForUser(
   // First time signing in with Google: create competition group workspace + member + joinCode + user pointer
   const groupId = `grp-${uid}`;
   const joinCode = generateJoinCode(uid);
-  const profileIds = localProfiles.slice(0, 50).map((p) => p.id);
+  const profileIds = localProfiles
+    .slice(0, 50)
+    .map((p) => sanitizeFirestoreId(p.id));
+  const safeActiveId =
+    activeProfileId && profileIds.includes(sanitizeFirestoreId(activeProfileId))
+      ? sanitizeFirestoreId(activeProfileId)
+      : profileIds[0] ?? '';
 
   try {
     const batch1 = writeBatch(db);
@@ -147,9 +286,7 @@ export async function ensureCloudGroupForUser(
       uid,
       displayName,
       groupId,
-      activeProfileId: profileIds.includes(activeProfileId)
-        ? activeProfileId
-        : profileIds[0] ?? '',
+      activeProfileId: safeActiveId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -158,17 +295,20 @@ export async function ensureCloudGroupForUser(
     handleFirestoreError(err, OperationType.WRITE, `groups/${groupId}`);
   }
 
-  // Commit user profiles + feed after member doc exists
+  // Commit user profiles (preserving local XP, sessions, memories, and local passwordHash) + feed after member doc exists
   try {
     const batch2 = writeBatch(db);
     for (const prof of localProfiles.slice(0, 50)) {
-      batch2.set(
-        doc(db, 'groups', groupId, 'profiles', prof.id),
-        {
-          ...sanitizeProfileForFirestore(prof, groupId, uid),
-          updatedAt: serverTimestamp(),
-        }
-      );
+      const safeId = sanitizeFirestoreId(prof.id);
+      const taggedProf: UserProfile = {
+        ...prof,
+        id: safeId,
+        ownerUid: prof.ownerUid || uid,
+      };
+      batch2.set(doc(db, 'groups', groupId, 'profiles', safeId), {
+        ...sanitizeProfileForFirestore(taggedProf, groupId, uid),
+        updatedAt: serverTimestamp(),
+      });
     }
     batch2.set(doc(db, 'groups', groupId, 'feed', 'latest'), {
       groupId,
@@ -214,11 +354,15 @@ export async function joinCloudGroupByCode(
   }
 
   if (!codeSnap.exists()) {
-    throw new Error('Nie znaleziono grupy o tym kodzie. Sprawdź kod u organizatora lub znajomego.');
+    throw new Error(
+      'Nie znaleziono grupy o tym kodzie. Sprawdź kod u organizatora lub znajomego.'
+    );
   }
 
   const targetGroupId = String(codeSnap.data().groupId);
   const uid = user.uid;
+  const displayName = (user.displayName || user.email || 'Gracz').slice(0, 80);
+  const safeActiveId = activeProfileId ? sanitizeFirestoreId(activeProfileId, '') : '';
   let existingProfileIds: string[] = [];
 
   try {
@@ -238,17 +382,26 @@ export async function joinCloudGroupByCode(
         (id) => typeof id === 'string'
       );
     }
-    await setDoc(
-      doc(db, 'users', uid),
-      {
-        uid,
-        displayName: (user.displayName || user.email || 'Gracz').slice(0, 80),
+
+    const userRef = doc(db, 'users', uid);
+    const existingUser = await getDoc(userRef);
+    if (existingUser.exists()) {
+      await updateDoc(userRef, {
+        displayName,
         groupId: targetGroupId,
-        activeProfileId,
+        activeProfileId: safeActiveId,
         updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+      });
+    } else {
+      await setDoc(userRef, {
+        uid,
+        displayName,
+        groupId: targetGroupId,
+        activeProfileId: safeActiveId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `groups/${targetGroupId}/members/${uid}`);
   }
@@ -256,7 +409,7 @@ export async function joinCloudGroupByCode(
   return {
     meta: {
       uid,
-      displayName: (user.displayName || user.email || 'Gracz').slice(0, 80),
+      displayName,
       email: user.email ?? '',
       groupId: targetGroupId,
       joinCode: code,
@@ -270,9 +423,10 @@ export async function pushProfileToCloud(
   uid: string,
   profile: UserProfile
 ): Promise<void> {
-  const path = `groups/${groupId}/profiles/${profile.id}`;
+  const safeId = sanitizeFirestoreId(profile.id);
+  const path = `groups/${groupId}/profiles/${safeId}`;
   try {
-    await setDoc(doc(db, 'groups', groupId, 'profiles', profile.id), {
+    await setDoc(doc(db, 'groups', groupId, 'profiles', safeId), {
       ...sanitizeProfileForFirestore(profile, groupId, uid),
       updatedAt: serverTimestamp(),
     });
@@ -288,7 +442,7 @@ export async function pushGroupProfileIds(
   const path = `groups/${groupId}`;
   try {
     await updateDoc(doc(db, 'groups', groupId), {
-      profileIds: profileIds.slice(0, 50),
+      profileIds: profileIds.map((id) => sanitizeFirestoreId(id)).slice(0, 50),
       updatedAt: serverTimestamp(),
     });
   } catch (err) {
@@ -301,13 +455,14 @@ export async function deleteProfileFromCloud(
   profileId: string,
   remainingIds: string[]
 ): Promise<void> {
-  const path = `groups/${groupId}/profiles/${profileId}`;
+  const safeId = sanitizeFirestoreId(profileId);
+  const path = `groups/${groupId}/profiles/${safeId}`;
   try {
     await updateDoc(doc(db, 'groups', groupId), {
-      profileIds: remainingIds.slice(0, 50),
+      profileIds: remainingIds.map((id) => sanitizeFirestoreId(id)).slice(0, 50),
       updatedAt: serverTimestamp(),
     });
-    await deleteDoc(doc(db, 'groups', groupId, 'profiles', profileId));
+    await deleteDoc(doc(db, 'groups', groupId, 'profiles', safeId));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
   }
@@ -338,7 +493,7 @@ export async function pushActiveProfileSelectionToCloud(
   const path = `users/${uid}`;
   try {
     await updateDoc(doc(db, 'users', uid), {
-      activeProfileId: activeProfileId.slice(0, 64),
+      activeProfileId: activeProfileId ? sanitizeFirestoreId(activeProfileId) : '',
       updatedAt: serverTimestamp(),
     });
   } catch (err) {
@@ -377,7 +532,6 @@ export function subscribeToGroupCloud(params: {
         : [];
       orderedIds = ids;
 
-      // Remove unsubscribed profiles
       for (const [existingId, unsub] of profileUnsubs.entries()) {
         if (!ids.includes(existingId)) {
           unsub();
@@ -386,7 +540,6 @@ export function subscribeToGroupCloud(params: {
         }
       }
 
-      // Subscribe to new profiles
       for (const pid of ids) {
         if (profileUnsubs.has(pid)) continue;
         const pPath = `groups/${groupId}/profiles/${pid}`;
@@ -447,7 +600,9 @@ export async function fetchGlobalSchoolDirectory(): Promise<SchoolDirectoryEntry
     return rawSchools
       .filter(
         (item): item is Record<string, unknown> =>
-          Boolean(item) && typeof item === 'object' && typeof (item as { name?: unknown }).name === 'string'
+          Boolean(item) &&
+          typeof item === 'object' &&
+          typeof (item as { name?: unknown }).name === 'string'
       )
       .map((item) => ({
         id:
@@ -467,20 +622,126 @@ export async function fetchGlobalSchoolDirectory(): Promise<SchoolDirectoryEntry
 export async function pushGlobalSchoolDirectory(
   entries: SchoolDirectoryEntry[]
 ): Promise<void> {
-  if (!auth.currentUser) return;
+  if (!auth.currentUser || entries.length === 0) return;
+  const dirRef = doc(db, 'schoolDirectory', 'global');
   try {
-    const remote = await fetchGlobalSchoolDirectory();
-    const merged = mergeSchoolDirectories([remote, entries]).map((item) => ({
-      id: slugifySchoolId(item.name),
-      name: item.name.slice(0, 64),
-      classes: item.classes.slice(0, 40),
-    }));
-    if (merged.length === 0) return;
-    await setDoc(doc(db, 'schoolDirectory', 'global'), {
-      schools: merged.slice(0, 100),
-      updatedAt: serverTimestamp(),
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(dirRef);
+      const remote: SchoolDirectoryEntry[] = snap.exists()
+        ? ((snap.data().schools as SchoolDirectoryEntry[]) ?? []).filter(
+            (s) => s && typeof s.name === 'string'
+          )
+        : [];
+      const merged = mergeSchoolDirectories([remote, entries]).map((item) => ({
+        id: slugifySchoolId(item.name),
+        name: item.name.slice(0, 64),
+        classes: item.classes.slice(0, 40),
+      }));
+      if (merged.length === 0) return;
+      tx.set(dirRef, {
+        schools: merged.slice(0, 100),
+        updatedAt: serverTimestamp(),
+      });
     });
   } catch {
     // Non-fatal: directory remains available locally
   }
+}
+
+export function getSchoolArenaBoardId(schoolName: string): string {
+  return `school-${slugifySchoolId(schoolName)}`;
+}
+
+async function upsertArenaBoardPlayers(
+  boardId: string,
+  uid: string,
+  cards: ArenaPlayerCard[]
+): Promise<void> {
+  if (cards.length === 0) return;
+  const safeBoardId = sanitizeFirestoreId(boardId, 'global');
+  const boardRef = doc(db, 'arenaBoards', safeBoardId);
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(boardRef);
+      const existing = snap.exists()
+        ? parseArenaPlayers(snap.data().players)
+        : [];
+      const byId = new Map<string, ArenaPlayerCard>();
+      for (const p of existing) {
+        byId.set(p.profileId, p);
+      }
+      for (const card of cards) {
+        const prev = byId.get(card.profileId);
+        if (!prev || card.xp >= prev.xp || card.updatedAtMs >= prev.updatedAtMs) {
+          byId.set(card.profileId, card);
+        }
+      }
+      const nextPlayers = Array.from(byId.values())
+        .sort((a, b) => b.xp - a.xp)
+        .slice(0, 100);
+
+      tx.set(boardRef, {
+        id: safeBoardId,
+        players: stripUndefinedDeep(nextPlayers),
+        updatedByUid: uid,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  } catch {
+    // Non-fatal background competition sync
+  }
+}
+
+export async function syncProfilesToArenaBoards(
+  uid: string,
+  profiles: UserProfile[]
+): Promise<void> {
+  const realProfiles = profiles.filter((p) => p.id && p.id !== 'guest-preview');
+  if (realProfiles.length === 0) return;
+
+  const now = Date.now();
+  const cards = realProfiles.map((p) => profileToArenaPlayerCard(p, now));
+  await upsertArenaBoardPlayers('global', uid, cards);
+
+  const bySchool = new Map<string, ArenaPlayerCard[]>();
+  for (const card of cards) {
+    if (!card.schoolName) continue;
+    const boardId = getSchoolArenaBoardId(card.schoolName);
+    const list = bySchool.get(boardId) ?? [];
+    list.push(card);
+    bySchool.set(boardId, list);
+  }
+  for (const [boardId, schoolCards] of bySchool.entries()) {
+    await upsertArenaBoardPlayers(boardId, uid, schoolCards);
+  }
+}
+
+export async function fetchArenaBoard(boardId: string): Promise<ArenaPlayerCard[]> {
+  try {
+    const snap = await getDoc(
+      doc(db, 'arenaBoards', sanitizeFirestoreId(boardId, 'global'))
+    );
+    if (!snap.exists()) return [];
+    return parseArenaPlayers(snap.data().players);
+  } catch {
+    return [];
+  }
+}
+
+export function subscribeToArenaBoard(
+  boardId: string,
+  onPlayers: (players: ArenaPlayerCard[]) => void
+): Unsubscribe {
+  const safeBoardId = sanitizeFirestoreId(boardId, 'global');
+  return onSnapshot(
+    doc(db, 'arenaBoards', safeBoardId),
+    (snap) => {
+      if (!snap.exists()) return;
+      onPlayers(parseArenaPlayers(snap.data().players));
+    },
+    () => {
+      // Non-fatal if user is signed out or board doesn't exist yet
+    }
+  );
 }
