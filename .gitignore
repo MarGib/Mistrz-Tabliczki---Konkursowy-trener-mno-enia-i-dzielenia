@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Lokalne ustawienia podglądu Claude Code
+.claude/launch.json
