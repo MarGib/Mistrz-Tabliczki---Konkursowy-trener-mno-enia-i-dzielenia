@@ -517,7 +517,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
             )}
             {error && <div className="rounded-2xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{error}</div>}
 
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" role="tablist">
+            <div className="flex flex-wrap gap-2" role="tablist">
               {TABS.map(([t, label]) => (
                 <button
                   key={t}
@@ -525,7 +525,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                   role="tab"
                   aria-selected={tab === t}
                   onClick={() => setTab(t)}
-                  className={`${btn} shrink-0 ${tab === t ? 'bg-[var(--th-primary)] text-[var(--th-primary-fg)]' : 'border border-[var(--th-border)] bg-[var(--th-surface)]'}`}
+                  className={`${btn} border ${tab === t ? 'border-[var(--th-primary)] bg-[var(--th-primary)] text-[var(--th-primary-fg)]' : 'border-[var(--th-border)] bg-[var(--th-surface)] hover:border-[var(--th-primary)]'}`}
                 >
                   {label}
                 </button>
