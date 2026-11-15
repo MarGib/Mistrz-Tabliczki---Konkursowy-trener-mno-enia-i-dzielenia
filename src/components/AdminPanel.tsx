@@ -354,7 +354,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
       setOwners((list) => (on ? [...list, row.uid] : list.filter((u) => u !== row.uid)));
       setNotice(
         on
-          ? `Konto „${row.login}” oznaczone jako Twoje. Po zalogowaniu na nie w Koncie pojawi się skrót do panelu (na innych urządzeniach do 30 min).`
+          ? `Konto „${row.login}” oznaczone jako Twoje. Po zalogowaniu na nie w Koncie pojawi się skrót do panelu (na innych urządzeniach do 2 min).`
           : `Konto „${row.login}” nie jest już oznaczone jako Twoje.`
       );
     } catch (err) {

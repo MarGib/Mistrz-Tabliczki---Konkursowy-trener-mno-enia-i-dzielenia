@@ -4,11 +4,12 @@ import { fetchIsOwnerAccount } from './accountCloud';
 /**
  * Czy zalogowane konto gracza jest kontem właściciela aplikacji (skrót do panelu administratora w Koncie).
  * Wynik trzymamy na urządzeniu, żeby działał bez internetu i nie zużywał odczytów bazy:
- * „tak” sprawdzamy ponownie po 12 h, „nie” po 30 min (żeby nowo oznaczone konto szybko dostało przycisk).
+ * „tak” sprawdzamy ponownie po 12 h, „nie” po 2 min (żeby nowo oznaczone konto od razu dostało przycisk).
  */
-const KEY = 'mt_owner_accounts';
+// v2: nowy klucz unieważnia stare „nie” zapamiętane przed oznaczeniem konta.
+const KEY = 'mt_owner_accounts_v2';
 const RECHECK_YES_MS = 12 * 3600_000;
-const RECHECK_NO_MS = 30 * 60_000;
+const RECHECK_NO_MS = 2 * 60_000;
 
 type Cache = Record<string, { v: boolean; at: number }>;
 
