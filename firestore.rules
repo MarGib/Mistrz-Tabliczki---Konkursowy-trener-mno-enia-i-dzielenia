@@ -128,7 +128,7 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    // Komunikat dla wszystkich (pasek / przerwa techniczna) — czyta każdy, zmienia tylko administrator.
+    // Komunikat dla wszystkich (pasek / przerwa techniczna) — czyta każdy, zmienia tylko właściciel.
     match /config/{docId} {
       allow get: if docId == 'status';
       allow list: if false;
@@ -156,7 +156,7 @@ service cloud.firestore {
     }
 
     // Uczciwa gra: stan weryfikacji konta. Gracz (jego aplikacja) może tylko ZGŁOSIĆ podejrzenie
-    // (watch → pending), nigdy go cofnąć. Zwolnić, zablokować lub oznaczyć jako zaufane może tylko administrator.
+    // (watch → pending), nigdy go cofnąć. Zwolnić, zablokować lub oznaczyć jako zaufane może tylko właściciel.
     function reviewState(uid) {
       let path = /databases/$(database)/documents/reviews/$(uid);
       return exists(path) ? get(path).data.state : 'none';
