@@ -27,14 +27,50 @@ service cloud.firestore {
       return code is string && code.size() >= 4 && code.size() <= 16 && code.matches('^[A-Z0-9\\-]+$');
     }
 
-    // Administrator (rodzic): konto Google z dokumentem admins/{uid} — nadawanym ręcznie w konsoli.
+    // Administrator: konto Google z dokumentem admins/{uid}.
+    // Rola „owner” (właściciel, jedno konto, nadawana ręcznie w konsoli) — pełne uprawnienia.
+    // Rola „admin” — podgląd panelu, nowe hasła, zapraszanie kolejnych administratorów.
     function isAdmin() {
       return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    function isOwner() {
+      return isAdmin() &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', 'owner') == 'owner';
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    // Zaproszenie: dowolny administrator zaprasza adres Google. Odwołać może tylko właściciel.
+    match /adminInvites/{email} {
+      allow get: if isSignedIn() && (isAdmin() ||
+        (request.auth.token.email_verified == true && myEmail() == email));
+      allow list: if isAdmin();
+      allow create: if isAdmin() && email == email.lower() && email.size() <= 120 && email.matches('^[^@/]+@[^@/]+$') &&
+        incoming().keys().hasOnly(['by', 'byEmail', 'at']) &&
+        incoming().by == request.auth.uid &&
+        incoming().byEmail == myEmail() &&
+        incoming().at == request.time;
+      allow update: if false;
+      allow delete: if isOwner();
+    }
+
     match /admins/{adminUid} {
-      allow get: if isSignedIn() && request.auth.uid == adminUid;
-      allow list, write: if false;
+      allow get: if isSignedIn() && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isAdmin();
+      // Zaproszona osoba sama przyjmuje zaproszenie przy pierwszym logowaniu (zawsze jako „admin”).
+      allow create: if isSignedIn() && request.auth.uid == adminUid &&
+        request.auth.token.email_verified == true &&
+        exists(/databases/$(database)/documents/adminInvites/$(myEmail())) &&
+        incoming().keys().hasOnly(['role', 'email', 'at']) &&
+        incoming().role == 'admin' &&
+        incoming().email == myEmail() &&
+        incoming().at == request.time;
+      allow update: if false;
+      // Administratorzy nie odbierają sobie nawzajem uprawnień — robi to tylko właściciel, a właściciela nie da się usunąć.
+      allow delete: if isOwner() && existing().get('role', 'owner') == 'admin';
     }
 
     // Konto gracza właściciela aplikacji: w Koncie widzi skrót do panelu administratora.
@@ -57,7 +93,8 @@ service cloud.firestore {
         incoming().reason is string && incoming().reason.size() <= 60 &&
         incoming().device is string && incoming().device.size() <= 20 &&
         incoming().at == request.time;
-      allow get, list, delete: if isAdmin();
+      allow get, list: if isAdmin();
+      allow delete: if isOwner();
       allow update: if false;
     }
 
@@ -73,7 +110,8 @@ service cloud.firestore {
         incoming().unsent is bool && incoming().dbPaused is bool &&
         incoming().firstSeenMs is number &&
         incoming().lastSeen == request.time;
-      allow get, list, delete: if isAdmin();
+      allow get, list: if isAdmin();
+      allow delete: if isOwner();
     }
 
     match /appErrors/{errorId} {
@@ -85,7 +123,8 @@ service cloud.firestore {
         incoming().platform is string && incoming().platform.size() <= 30 &&
         incoming().device is string && incoming().device.size() <= 40 &&
         incoming().at == request.time;
-      allow get, list, delete: if isAdmin();
+      allow get, list: if isAdmin();
+      allow delete: if isOwner();
       allow update: if false;
     }
 
@@ -93,7 +132,7 @@ service cloud.firestore {
     match /config/{docId} {
       allow get: if docId == 'status';
       allow list: if false;
-      allow write: if isAdmin() && docId == 'status' &&
+      allow write: if isOwner() && docId == 'status' &&
         incoming().keys().hasOnly(['mode', 'message', 'untilMs', 'updatedAt']) &&
         incoming().mode in ['off', 'banner', 'maintenance'] &&
         incoming().message is string && incoming().message.size() <= 300 &&
@@ -111,7 +150,8 @@ service cloud.firestore {
         incoming().device is string && incoming().device.size() <= 40 &&
         incoming().status == 'new' &&
         incoming().at == request.time;
-      allow get, list, delete: if isAdmin();
+      allow get, list: if isAdmin();
+      allow delete: if isOwner();
       allow update: if isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status']);
     }
 
@@ -128,8 +168,9 @@ service cloud.firestore {
 
     match /reviews/{uid} {
       allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      allow list, delete: if isAdmin();
-      allow create: if (isAdmin() &&
+      allow list: if isAdmin();
+      allow delete: if isOwner();
+      allow create: if (isOwner() &&
           incoming().state in ['watch', 'pending', 'cleared', 'suspended'] && incoming().trusted is bool) ||
         (isSignedIn() && request.auth.uid == uid &&
         incoming().keys().hasOnly(['uid', 'login', 'state', 'events', 'trusted', 'device', 'createdAt', 'updatedAt']) &&
@@ -141,7 +182,7 @@ service cloud.firestore {
         incoming().device is string && incoming().device.size() <= 40 &&
         incoming().createdAt == request.time && incoming().updatedAt == request.time);
       allow update: if
-        (isAdmin() &&
+        (isOwner() &&
           incoming().diff(existing()).affectedKeys().hasOnly(['state', 'trusted', 'note', 'decidedAt', 'updatedAt']) &&
           incoming().state in ['watch', 'pending', 'cleared', 'suspended'] &&
           incoming().trusted is bool) ||

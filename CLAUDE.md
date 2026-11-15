@@ -43,7 +43,7 @@ Odpowiadaj i pisz teksty w aplikacji **po polsku**, prostymi słowami (użytkown
 ## Kolekcje Firestore
 
 `logins` · `accounts/{uid}` (+ `history/{RRRR-MM}`) · `circles/{id}` (+ `members`, `players`) · `circleCodes` · `reviews` ·
-`loginEvents` · `devices` · `appErrors` · `helpRequests` · `config/status` · `admins/{uid}`.
+`loginEvents` · `devices` · `appErrors` · `helpRequests` · `config/status` · `admins/{uid}` (`role`: `owner` = właściciel, jedno konto; `admin` = zaproszony) · `adminInvites/{email}` · `ownerAccounts/{uid}` (konto gracza ze skrótem do panelu).
 
 ## Ważne zachowania (nie psuć)
 

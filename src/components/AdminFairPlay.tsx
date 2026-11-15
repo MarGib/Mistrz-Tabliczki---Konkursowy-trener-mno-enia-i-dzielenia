@@ -44,7 +44,8 @@ export function AdminFairPlay({
   accounts: AdminAccountRow[];
   devices: DeviceRow[];
   events: LoginEventRow[];
-  onDecide: (uid: string, decision: 'cleared' | 'trusted' | 'suspended') => Promise<void>;
+  /** Brak = decyzje podejmuje tylko właściciel (administrator widzi zgłoszenia bez przycisków). */
+  onDecide?: (uid: string, decision: 'cleared' | 'trusted' | 'suspended') => Promise<void>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -57,6 +58,7 @@ export function AdminFairPlay({
 
   const decide = async (uid: string, d: 'cleared' | 'trusted' | 'suspended') => {
     if (d === 'suspended' && !window.confirm('Zablokować konto? Gracz zobaczy ekran „Konto jest wstrzymane”. Można to cofnąć.')) return;
+    if (!onDecide) return;
     setBusy(uid);
     try {
       await onDecide(uid, d);
@@ -65,7 +67,9 @@ export function AdminFairPlay({
     }
   };
 
-  const actions = (uid: string, state: ReviewRow['state']) => (
+  const actions = (uid: string, state: ReviewRow['state']) => !onDecide ? (
+    <p className="text-xs text-[var(--th-text-muted)]">Decyzję (w porządku / zaufaj / zablokuj) podejmuje właściciel aplikacji.</p>
+  ) : (
     <div className="flex flex-wrap gap-2">
       {state !== 'cleared' && (
         <button type="button" disabled={busy === uid} onClick={() => void decide(uid, 'cleared')} className={btnGhost}>

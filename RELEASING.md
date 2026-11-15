@@ -42,6 +42,14 @@ Wydania → „Pasek z informacją” — np. zapowiedź przerwy albo nowego tur
 
 `git revert <commit>` i `git push` — urządzenia przełączą się na poprzednią wersję tak samo po cichu.
 
+## Administratorzy panelu
+
+- **Właściciel** (jedno konto, `admins/{uid}` z `role: "owner"`, nadane ręcznie w konsoli): wszystko, w tym zakładki Baza i Wydania, blokady kont, usuwanie danych i odbieranie uprawnień.
+- **Administrator** (`role: "admin"`): przegląda panel, ustawia nowe hasła, oznacza prośby jako załatwione i zaprasza kolejne osoby. Nie może odebrać uprawnień nikomu.
+- Nowy administrator: Panel → **Administratorzy** → wpisz adres Google → Zaproś. Osoba otwiera adres aplikacji z `#admin` i loguje się tym kontem — uprawnienia nadają się same.
+- Żeby mógł zmieniać hasła (robi to właściciel, raz na osobę): Google Cloud → projekt → **IAM** → „Przyznaj dostęp” → jego adres Google, role **Firebase Authentication Admin** i **Service Usage Consumer**. Gdy ekran zgody OAuth jest w trybie „Testing”, dopisz go też jako testera.
+- Skrót do panelu w Koncie gracza: Panel → Konta → „⭐ Moje konto” przy koncie gracza.
+
 ## Uczciwa gra i ochrona bazy
 
 **Co działa samo:**

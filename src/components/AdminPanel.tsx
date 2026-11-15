@@ -1,7 +1,9 @@
-import { KeyRound, LogIn, LogOut, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { KeyRound, LogIn, LogOut, RefreshCw, ShieldCheck, UserPlus, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type AdminAccountRow,
+  type AdminInviteRow,
+  type AdminMemberRow,
   type AdminSession,
   type AppErrorRow,
   type DbUsageDay,
@@ -25,6 +27,11 @@ import {
   listHelpRequests,
   listReviews,
   listOwnerAccounts,
+  listAdmins,
+  listAdminInvites,
+  inviteAdmin,
+  removeAdmin,
+  cancelAdminInvite,
   setOwnerAccount,
   decideReview,
   type ReviewRow,
@@ -87,7 +94,10 @@ const TOPIC_PL: Record<string, string> = {
   other: 'Inny problem',
 };
 
-type Tab = 'przeglad' | 'weryfikacja' | 'aktywnosc' | 'baza' | 'hosting' | 'wydania' | 'pomoc' | 'bledy' | 'konta' | 'logowania';
+type Tab = 'przeglad' | 'weryfikacja' | 'aktywnosc' | 'baza' | 'hosting' | 'wydania' | 'pomoc' | 'bledy' | 'konta' | 'logowania' | 'admini';
+
+/** Zakładki tylko dla właściciela: kopia i zużycie bazy, komunikaty dla graczy. */
+const OWNER_TABS: Tab[] = ['baza', 'wydania'];
 
 const LEVEL_STYLE: Record<Level, string> = {
   ok: 'border-emerald-300 bg-emerald-50 text-emerald-950',
@@ -184,6 +194,9 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
   const [help, setHelp] = useState<HelpRequestRow[]>([]);
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [owners, setOwners] = useState<string[]>([]);
+  const [admins, setAdmins] = useState<AdminMemberRow[]>([]);
+  const [invites, setInvites] = useState<AdminInviteRow[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
   const [hosting, setHosting] = useState<HostingInfo | null>(null);
   const [usage, setUsage] = useState<DbUsageDay[] | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -212,6 +225,8 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
     try {
       void soft(listReviews(), []).then(setReviews);
       void soft(listOwnerAccounts(), []).then(setOwners);
+      void soft(listAdmins(), []).then(setAdmins);
+      void soft(listAdminInvites(), []).then(setInvites);
       const [a, e, d, er, h, ho, st] = await Promise.all([
         listAccounts(),
         soft(listLoginEvents(), []),
@@ -240,7 +255,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
 
   useEffect(() => {
     if (demo) {
-      setSession({ uid: 'demo', email: 'demo@przyklad', isAdmin: true });
+      setSession({ uid: 'demo', email: 'demo@przyklad', isAdmin: true, role: 'owner' });
       setAccounts(demo.accounts);
       setEvents(demo.events);
       setDevices(demo.devices);
@@ -301,6 +316,29 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
       setNewPwd('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runAdminAction = async (action: () => Promise<string>) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      setNotice(await action());
+      const [a, i] = await Promise.all([listAdmins(), listAdminInvites()]);
+      setAdmins(a);
+      setInvites(i);
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? '';
+      setError(
+        code === 'permission-denied'
+          ? 'Baza nie pozwoliła na tę zmianę (brak uprawnień albo reguły bazy nie są jeszcze opublikowane).'
+          : err instanceof Error
+            ? err.message
+            : String(err)
+      );
     } finally {
       setBusy(false);
     }
@@ -390,7 +428,9 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
 
   const fairCount =
     reviews.filter((r) => r.state === 'pending').length + fairPlayFindings(accounts, devices, events).fastSeries.length;
-  const TABS: [Tab, string][] = [
+  const isOwner = session?.role === 'owner';
+  const TABS = (
+    [
     ['przeglad', 'Przegląd'],
     ['weryfikacja', `Uczciwa gra${fairCount ? ` (${fairCount})` : ''}`],
     ['aktywnosc', 'Aktywność'],
@@ -401,7 +441,9 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
     ['bledy', `Błędy${err24 ? ` (${err24})` : ''}`],
     ['konta', `Konta (${accounts.length})`],
     ['logowania', `Logowania${failedCount ? ` · ${failedCount}✗` : ''}`],
-  ];
+    ['admini', 'Administratorzy'],
+    ] as [Tab, string][]
+  ).filter(([t]) => isOwner || !OWNER_TABS.includes(t));
 
   return (
     <div className="fixed inset-0 z-[85] bg-[var(--th-canvas)] text-[var(--th-text)] overflow-y-auto" data-testid="admin-panel">
@@ -421,7 +463,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
         ) : !session ? (
           <div className={`${card} space-y-3`}>
             <p className="text-sm">
-              Panel jest tylko dla właściciela aplikacji. Zaloguj się kontem Google, które jest właścicielem projektu Firebase.
+              Panel jest dla właściciela aplikacji i zaproszonych administratorów. Zaloguj się swoim kontem Google.
             </p>
             <button type="button" onClick={signIn} disabled={busy} className={btnPrimary}>
               <LogIn className="w-4 h-4" aria-hidden="true" /> Zaloguj przez Google
@@ -434,8 +476,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
               Konto <b>{session.email}</b> nie ma jeszcze uprawnień administratora.
             </p>
             <p className="text-xs text-[var(--th-text-muted)]">
-              Identyfikator do nadania uprawnień (dokument <code>admins/{'{uid}'}</code> w bazie):{' '}
-              <code className="select-all break-all">{session.uid}</code>
+              Poproś administratora, żeby zaprosił adres <b>{session.email}</b> (Panel → Administratorzy), a potem kliknij „Sprawdź ponownie”.
             </p>
             <div className="flex gap-2">
               <button type="button" onClick={signIn} className={btnGhost}>
@@ -450,7 +491,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
           <>
             <div className={`${card} flex flex-wrap items-center justify-between gap-2`}>
               <p className="text-sm">
-                Zalogowano: <b>{session.email}</b>
+                Zalogowano: <b>{session.email}</b> · {isOwner ? 'właściciel' : 'administrator'}
                 <span className="block text-xs text-[var(--th-text-muted)]">Dane z {fmtTime(loadedAt)}</span>
 
               </p>
@@ -493,7 +534,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
 
             {tab === 'przeglad' && (
               <div className="space-y-4">
-                {!demo && <AdminBackup compact />}
+                {!demo && isOwner && <AdminBackup compact />}
                 <div className="space-y-2">
                   {health.map((h, i) => (
                     <div key={i} className={`rounded-2xl border px-3 py-2 text-sm font-semibold ${LEVEL_STYLE[h.level]}`}>
@@ -793,7 +834,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                 accounts={accounts}
                 devices={devices}
                 events={events}
-                onDecide={async (uid, d) => {
+                onDecide={!isOwner ? undefined : async (uid, d) => {
                   try {
                     await decideReview(uid, d);
                     setReviews(await listReviews());
@@ -847,7 +888,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                             >
                               Załatwione
                             </button>
-                          ) : (
+                          ) : isOwner && (
                             <button
                               type="button"
                               onClick={() => void deleteAdminDocs('helpRequests', [h.id]).then(() => setHelp((l) => l.filter((x) => x.id !== h.id)))}
@@ -870,7 +911,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
               <div className={`${card} space-y-2`}>
                 <div className="flex justify-between items-center">
                   <p className="text-xs text-[var(--th-text-muted)]">Nieobsłużone błędy z urządzeń (max 3 na dobę z jednego urządzenia).</p>
-                  {errors.length > 0 && (
+                  {isOwner && errors.length > 0 && (
                     <button type="button" onClick={() => void deleteAdminDocs('appErrors', errors.map((e) => e.id)).then(() => setErrors([]))} className="text-xs underline text-[var(--th-text-muted)] cursor-pointer">
                       Wyczyść
                     </button>
@@ -941,11 +982,115 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
               </div>
             )}
 
+            {tab === 'admini' && (
+              <div className="space-y-3">
+                <div className={`${card} space-y-2`}>
+                  <p className="font-bold">Kto ma dostęp do panelu</p>
+                  {admins.map((a) => (
+                    <div key={a.uid} className="flex flex-wrap items-center justify-between gap-2 text-sm border-t border-[var(--th-border)] pt-2">
+                      <span className="min-w-0 break-all">
+                        <b>{a.email || (a.uid === session.uid ? session.email : 'konto Google')}</b>
+                        <span className="text-[var(--th-text-muted)]"> · {a.role === 'owner' ? 'właściciel' : 'administrator'}</span>
+                      </span>
+                      {isOwner && a.role === 'admin' && (
+                        <button
+                          type="button"
+                          disabled={busy || Boolean(demo)}
+                          onClick={() => {
+                            if (!window.confirm(`Odebrać uprawnienia administratora kontu ${a.email}?`)) return;
+                            void runAdminAction(async () => {
+                              await removeAdmin(a);
+                              return `${a.email} nie jest już administratorem.`;
+                            });
+                          }}
+                          className={`${btnGhost} text-rose-600`}
+                        >
+                          Odbierz uprawnienia
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {admins.length === 0 && <p className="text-sm text-[var(--th-text-muted)]">Brak danych.</p>}
+                  <p className="text-xs text-[var(--th-text-muted)]">
+                    Administrator może przeglądać panel, ustawiać nowe hasła i zapraszać kolejne osoby. Uprawnienia odbiera tylko właściciel.
+                    Kopia i zużycie bazy, komunikaty dla graczy, blokady kont i usuwanie danych są tylko dla właściciela.
+                  </p>
+                </div>
+
+                <form
+                  className={`${card} space-y-2`}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void runAdminAction(async () => {
+                      const email = await inviteAdmin(inviteEmail);
+                      setInviteEmail('');
+                      return `Zaproszono ${email}. Ta osoba otwiera panel (adres aplikacji z #admin na końcu) i loguje się tym kontem Google.`;
+                    });
+                  }}
+                >
+                  <p className="font-bold inline-flex items-center gap-2">
+                    <UserPlus className="w-4 h-4" aria-hidden="true" /> Zaproś administratora
+                  </p>
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="adres konta Google"
+                    autoComplete="off"
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--th-border)] bg-[var(--th-surface)] px-3"
+                  />
+                  <button type="submit" disabled={busy || Boolean(demo) || !inviteEmail.trim()} className={btnPrimary}>
+                    Zaproś
+                  </button>
+                  {isOwner && (
+                    <p className="text-xs text-[var(--th-text-muted)]">
+                      Żeby nowy administrator mógł zmieniać hasła, dodaj jego konto Google w Google Cloud → IAM projektu z rolami
+                      „Firebase Authentication Admin” i „Service Usage Consumer”. Jeśli ekran zgody Google jest w trybie testowym, dopisz go też jako testera.
+                    </p>
+                  )}
+                </form>
+
+                {invites.length > 0 && (
+                  <div className={`${card} space-y-2`}>
+                    <p className="font-bold">Zaproszenia</p>
+                    {invites.map((i) => {
+                      const accepted = admins.some((a) => a.email === i.email);
+                      return (
+                        <div key={i.email} className="flex flex-wrap items-center justify-between gap-2 text-sm border-t border-[var(--th-border)] pt-2">
+                          <span className="min-w-0 break-all">
+                            <b>{i.email}</b>
+                            <span className="text-[var(--th-text-muted)]">
+                              {' '}· {accepted ? 'przyjęte' : 'czeka na pierwsze logowanie'} · zaprosił(a) {i.byEmail || '—'}
+                            </span>
+                          </span>
+                          {isOwner && !accepted && (
+                            <button
+                              type="button"
+                              disabled={busy || Boolean(demo)}
+                              onClick={() =>
+                                void runAdminAction(async () => {
+                                  await cancelAdminInvite(i.email);
+                                  return `Zaproszenie dla ${i.email} odwołane.`;
+                                })
+                              }
+                              className={btnGhost}
+                            >
+                              Odwołaj
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {tab === 'logowania' && (
               <div className={`${card} space-y-1`}>
                 <div className="flex justify-between items-center mb-2">
                   <p className="text-xs text-[var(--th-text-muted)]">Ostatnie próby logowania (hasła nie są zapisywane).</p>
-                  {events.length > 0 && (
+                  {isOwner && events.length > 0 && (
                     <button type="button" onClick={() => void clearLoginEvents(events.map((e) => e.id)).then(refresh)} className="text-xs underline text-[var(--th-text-muted)] cursor-pointer">
                       Wyczyść
                     </button>

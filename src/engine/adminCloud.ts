@@ -116,10 +116,14 @@ function getAdminHandle(): AdminHandle {
   return handle;
 }
 
+export type AdminRole = 'owner' | 'admin';
+
 export interface AdminSession {
   uid: string;
   email: string;
   isAdmin: boolean;
+  /** „owner” — właściciel (pełne uprawnienia), „admin” — podgląd, nowe hasła, zaproszenia. */
+  role: AdminRole | null;
 }
 
 export function isAdminDevice(): boolean {
@@ -130,14 +134,42 @@ export function isAdminDevice(): boolean {
   }
 }
 
-async function checkAdmin(uid: string): Promise<boolean> {
+function emailKey(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/**
+ * Rola zalogowanego konta Google. Gdy nie ma jeszcze dokumentu admins/{uid}, a na jego adres czeka
+ * zaproszenie — przyjmuje je (zapisuje się jako „admin”).
+ */
+async function checkAdmin(uid: string, email: string): Promise<AdminRole | null> {
   const { db } = getAdminHandle();
   try {
     const snap = await getDoc(doc(db, 'admins', uid));
-    return snap.exists();
+    if (snap.exists()) return snap.data().role === 'admin' ? 'admin' : 'owner';
   } catch {
-    return false;
+    return null;
   }
+  if (!email) return null;
+  try {
+    const invite = await getDoc(doc(db, 'adminInvites', emailKey(email)));
+    if (!invite.exists()) return null;
+    await setDoc(doc(db, 'admins', uid), { role: 'admin', email: emailKey(email), at: serverTimestamp() });
+    return 'admin';
+  } catch {
+    return null;
+  }
+}
+
+function toSession(uid: string, email: string, role: AdminRole | null): AdminSession {
+  if (role) {
+    try {
+      window.localStorage.setItem(ADMIN_FLAG, '1');
+    } catch {
+      // ignore
+    }
+  }
+  return { uid, email, isAdmin: role !== null, role };
 }
 
 /** Sesja z poprzedniego razu (bez tokenu do resetu haseł — ten trzeba odświeżyć logowaniem). */
@@ -146,8 +178,8 @@ export async function restoreAdminSession(): Promise<AdminSession | null> {
   await auth.authStateReady();
   const user = auth.currentUser;
   if (!user) return null;
-  const isAdmin = await checkAdmin(user.uid);
-  return { uid: user.uid, email: user.email ?? '', isAdmin };
+  const email = user.email ?? '';
+  return toSession(user.uid, email, await checkAdmin(user.uid, email));
 }
 
 export async function adminSignIn(): Promise<AdminSession> {
@@ -155,15 +187,75 @@ export async function adminSignIn(): Promise<AdminSession> {
   const result = await signInWithPopup(auth, signInProvider());
   // Token z samego logowania nie ma poufnych uprawnień — ten pobiera ensureAdminToken().
   saveToken(null);
-  const isAdmin = await checkAdmin(result.user.uid);
-  if (isAdmin) {
-    try {
-      window.localStorage.setItem(ADMIN_FLAG, '1');
-    } catch {
-      // ignore
-    }
-  }
-  return { uid: result.user.uid, email: result.user.email ?? '', isAdmin };
+  const email = result.user.email ?? '';
+  return toSession(result.user.uid, email, await checkAdmin(result.user.uid, email));
+}
+
+/* ───────────── Administratorzy i zaproszenia ───────────── */
+
+export interface AdminMemberRow {
+  uid: string;
+  email: string;
+  role: AdminRole;
+  atMs: number;
+}
+
+export interface AdminInviteRow {
+  email: string;
+  byEmail: string;
+  atMs: number;
+}
+
+export async function listAdmins(): Promise<AdminMemberRow[]> {
+  const { db } = getAdminHandle();
+  const snap = await getDocs(collection(db, 'admins'));
+  return snap.docs
+    .map((d) => {
+      const x = d.data() as Record<string, unknown>;
+      return {
+        uid: d.id,
+        email: String(x.email ?? ''),
+        role: (x.role === 'admin' ? 'admin' : 'owner') as AdminRole,
+        atMs: ms(x.at),
+      };
+    })
+    .sort((a, b) => (a.role === b.role ? a.atMs - b.atMs : a.role === 'owner' ? -1 : 1));
+}
+
+export async function listAdminInvites(): Promise<AdminInviteRow[]> {
+  const { db } = getAdminHandle();
+  const snap = await getDocs(collection(db, 'adminInvites'));
+  return snap.docs
+    .map((d) => {
+      const x = d.data() as Record<string, unknown>;
+      return { email: d.id, byEmail: String(x.byEmail ?? ''), atMs: ms(x.at) };
+    })
+    .sort((a, b) => b.atMs - a.atMs);
+}
+
+/** Zaproszenie adresu Google. Osoba zostaje administratorem, gdy sama zaloguje się do panelu tym kontem. */
+export async function inviteAdmin(rawEmail: string): Promise<string> {
+  const email = emailKey(rawEmail);
+  if (!/^[^@/\s]+@[^@/\s]+\.[^@/\s]+$/.test(email)) throw new Error('Wpisz poprawny adres konta Google, np. jan.kowalski@gmail.com.');
+  const { auth, db } = getAdminHandle();
+  const me = auth.currentUser;
+  if (!me) throw new Error('Zaloguj się do panelu przez Google.');
+  await setDoc(doc(db, 'adminInvites', email), { by: me.uid, byEmail: emailKey(me.email ?? ''), at: serverTimestamp() });
+  return email;
+}
+
+/** Tylko właściciel: odbiera uprawnienia administratorowi (i jego zaproszenie, żeby nie wrócił sam). */
+export async function removeAdmin(row: AdminMemberRow): Promise<void> {
+  if (row.role !== 'admin') throw new Error('Uprawnień właściciela nie można odebrać w panelu.');
+  const { db } = getAdminHandle();
+  if (row.email) await deleteDoc(doc(db, 'adminInvites', row.email)).catch(() => {});
+  await deleteDoc(doc(db, 'admins', row.uid));
+}
+
+/** Tylko właściciel: odwołuje zaproszenie, którego nikt jeszcze nie przyjął. */
+export async function cancelAdminInvite(email: string): Promise<void> {
+  const { db } = getAdminHandle();
+  await deleteDoc(doc(db, 'adminInvites', email));
 }
 
 export async function adminSignOut(): Promise<void> {
