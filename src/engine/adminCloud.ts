@@ -11,6 +11,7 @@ import {
   type Auth,
   GoogleAuthProvider,
   getAuth,
+  reauthenticateWithPopup,
   signInWithPopup,
   signOut,
 } from 'firebase/auth';
@@ -48,6 +49,51 @@ interface AdminHandle {
 let handle: AdminHandle | null = null;
 let accessToken: string | null = null;
 let accessTokenAt = 0;
+// Token Google (reset haseł, zużycie bazy) trzymamy w tej karcie, żeby odświeżenie strony go nie gubiło.
+const TOKEN_KEY = 'mt_admin_gtoken';
+try {
+  const raw = JSON.parse(window.sessionStorage.getItem(TOKEN_KEY) ?? 'null');
+  if (raw && typeof raw.t === 'string' && Date.now() - Number(raw.at) < 50 * 60_000) {
+    accessToken = raw.t;
+    accessTokenAt = Number(raw.at);
+  }
+} catch {
+  // brak sessionStorage
+}
+function saveToken(token: string | null): void {
+  accessToken = token;
+  accessTokenAt = token ? Date.now() : 0;
+  try {
+    if (token) window.sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ t: token, at: accessTokenAt }));
+    else window.sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function adminProvider(email?: string): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/identitytoolkit');
+  provider.addScope('https://www.googleapis.com/auth/monitoring.read');
+  // Znane konto: Google pomija wybór konta i zgody — okienko mignie i samo się zamknie.
+  provider.setCustomParameters(email ? { login_hint: email } : { prompt: 'select_account' });
+  return provider;
+}
+
+/**
+ * Zapewnia ważny token Google. Gdy wygasł (po ok. godzinie), odnawia go sam: krótkie okienko Google
+ * otwiera się i zamyka bez klikania. Wywoływać z kliknięcia (przeglądarka pozwala wtedy na okienko).
+ */
+export async function ensureAdminToken(): Promise<void> {
+  if (hasFreshAdminToken()) return;
+  const { auth } = getAdminHandle();
+  const user = auth.currentUser;
+  if (!user) throw new Error('Zaloguj się do panelu przez Google.');
+  const result = await reauthenticateWithPopup(user, adminProvider(user.email ?? undefined));
+  const cred = GoogleAuthProvider.credentialFromResult(result);
+  if (!cred?.accessToken) throw new Error('Google nie zwrócił tokenu — spróbuj jeszcze raz.');
+  saveToken(cred.accessToken);
+}
 
 function getAdminHandle(): AdminHandle {
   if (handle) return handle;
@@ -94,14 +140,9 @@ export async function restoreAdminSession(): Promise<AdminSession | null> {
 
 export async function adminSignIn(): Promise<AdminSession> {
   const { auth } = getAdminHandle();
-  const provider = new GoogleAuthProvider();
-  provider.addScope('https://www.googleapis.com/auth/identitytoolkit');
-  provider.addScope('https://www.googleapis.com/auth/monitoring.read');
-  provider.setCustomParameters({ prompt: 'select_account' });
-  const result = await signInWithPopup(auth, provider);
+  const result = await signInWithPopup(auth, adminProvider());
   const cred = GoogleAuthProvider.credentialFromResult(result);
-  accessToken = cred?.accessToken ?? null;
-  accessTokenAt = Date.now();
+  saveToken(cred?.accessToken ?? null);
   const isAdmin = await checkAdmin(result.user.uid);
   if (isAdmin) {
     try {
@@ -114,7 +155,7 @@ export async function adminSignIn(): Promise<AdminSession> {
 }
 
 export async function adminSignOut(): Promise<void> {
-  accessToken = null;
+  saveToken(null);
   await signOut(getAdminHandle().auth).catch(() => {});
 }
 
@@ -226,9 +267,7 @@ export async function adminResetPassword(row: AdminAccountRow, newPassword: stri
   const pwd = newPassword.trim();
   if (pwd.length < 4) throw new Error('Nowe hasło lub PIN musi mieć co najmniej 4 znaki.');
   if (!row.uid || !row.profileId) throw new Error('Brak danych konta.');
-  if (!hasFreshAdminToken()) {
-    throw new Error('Zaloguj się ponownie przez Google (przycisk na górze), aby resetować hasła.');
-  }
+  await ensureAdminToken();
   const secret = secretFromHash(hashAccountPassword(pwd, row.profileId));
   const projectId = firebaseConfig.projectId;
   const res = await fetch(
@@ -252,7 +291,7 @@ export async function adminResetPassword(row: AdminAccountRow, newPassword: stri
       // ignore
     }
     if (res.status === 401) {
-      accessToken = null;
+      saveToken(null);
       throw new Error('Sesja Google wygasła — zaloguj się ponownie i powtórz.');
     }
     if (res.status === 403) {

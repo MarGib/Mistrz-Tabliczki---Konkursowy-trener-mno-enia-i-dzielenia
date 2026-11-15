@@ -50,7 +50,11 @@ self.addEventListener('activate', (event) => {
       }
       const keys = await caches.keys();
       if (m && (await caches.has(CACHE))) {
-        await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+        // Zostawiamy też JEDNĄ poprzednią wersję: otwarte jeszcze karty ze starą wersją dociągają z niej
+        // swoje pliki (inaczej „Failed to fetch dynamically imported module” po wydaniu).
+        const old = keys.filter((k) => k !== CACHE && k.startsWith(PREFIX));
+        const keepPrev = old[old.length - 1];
+        await Promise.all(keys.filter((k) => k !== CACHE && k !== keepPrev).map((k) => caches.delete(k)));
       }
       await self.clients.claim();
       // Obrazki i zrzuty pomocy dociągamy w tle, po kolei, bez blokowania aplikacji.
@@ -115,7 +119,10 @@ self.addEventListener('fetch', (event) => {
       const c = await currentCache();
       // ignoreVary: serwer (GitHub Pages, podgląd) wysyła „Vary: Accept-Encoding”, a żądania skryptów
       // modułowych różnią się nagłówkami od tych z instalacji — bez tego bez internetu byłby pusty ekran.
-      const cached = await c.match(req, { ignoreSearch: true, ignoreVary: true });
+      const cached =
+        (await c.match(req, { ignoreSearch: true, ignoreVary: true })) ||
+        // plik starszej wersji (karta otwarta przed wydaniem) — z poprzedniego zestawu
+        (await caches.match(req, { ignoreSearch: true, ignoreVary: true }));
       if (cached) return cached;
       try {
         const res = await fetch(req);

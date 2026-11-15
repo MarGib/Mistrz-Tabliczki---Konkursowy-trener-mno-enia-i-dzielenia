@@ -190,7 +190,11 @@ export function computeHealth(
   now = Date.now()
 ): HealthSignal[] {
   const out: HealthSignal[] = [];
-  const err24 = errors.filter((e) => e.atMs >= now - DAY).length;
+  // Pomijamy znane, niegroźne zgłoszenia: wbudowane przeglądarki Messengera/Facebooka (iabjs)
+  // i pliki starej wersji tuż po wydaniu (aplikacja sama się przeładowuje).
+  const harmless = (e: AppErrorRow) =>
+    /iabjs:\/\/|Java object is gone|dynamically imported module|Importing a module script failed/i.test(`${e.message} ${e.stack ?? ''}`);
+  const err24 = errors.filter((e) => e.atMs >= now - DAY && !harmless(e)).length;
   const openHelp = help.filter((h) => h.status === 'new').length;
   if (openHelp) out.push({ level: 'warn', text: `Prośby o pomoc czekają: ${openHelp}` });
   if (err24 >= 5) out.push({ level: 'bad', text: `Dużo błędów aplikacji w ciągu doby: ${err24}` });

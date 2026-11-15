@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { type ComponentType, Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { ExerciseArena } from './components/ExerciseArena';
 import { GroupsPanel } from './components/GroupsPanel';
 import { DbNotice, SyncPrompt } from './components/SyncPrompt';
@@ -27,14 +27,34 @@ import { GuidedTour } from './help/GuidedTour';
 import type { ActiveSeriesConfig, DeviceProfile } from './types/math';
 
 // Rzadziej używane ekrany wczytują się dopiero przy pierwszym otwarciu (szybszy start na słabszych telefonach).
-const StatsView = lazy(() => import('./components/StatsView').then((m) => ({ default: m.StatsView })));
-const ThemesView = lazy(() => import('./components/ThemesView').then((m) => ({ default: m.ThemesView })));
-const TournamentsView = lazy(() => import('./components/TournamentsView').then((m) => ({ default: m.TournamentsView })));
-const ProfileSettingsView = lazy(() => import('./components/ProfileSettingsView').then((m) => ({ default: m.ProfileSettingsView })));
-const AdminPanel = lazy(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
-const TrueFalseGame = lazy(() => import('./components/TrueFalseGame').then((m) => ({ default: m.TrueFalseGame })));
-const PairsGame = lazy(() => import('./components/PairsGame').then((m) => ({ default: m.PairsGame })));
-const MyCertificates = lazy(() => import('./components/MyCertificates').then((m) => ({ default: m.MyCertificates })));
+/**
+ * Ekrany ładowane na żądanie. Gdy w międzyczasie wyszła nowa wersja i plik starej już nie istnieje,
+ * przeładowujemy stronę raz (dane są zapisane na urządzeniu), zamiast pokazywać błąd.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lazyWithReload<T extends ComponentType<any>>(load: () => Promise<{ default: T }>) {
+  return lazy(() =>
+    load().catch((err: unknown) => {
+      const KEY = 'mt_chunk_reload_at';
+      const last = Number(sessionStorage.getItem(KEY) || 0);
+      if (Date.now() - last > 30_000) {
+        sessionStorage.setItem(KEY, String(Date.now()));
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw err;
+    })
+  );
+}
+
+const StatsView = lazyWithReload(() => import('./components/StatsView').then((m) => ({ default: m.StatsView })));
+const ThemesView = lazyWithReload(() => import('./components/ThemesView').then((m) => ({ default: m.ThemesView })));
+const TournamentsView = lazyWithReload(() => import('./components/TournamentsView').then((m) => ({ default: m.TournamentsView })));
+const ProfileSettingsView = lazyWithReload(() => import('./components/ProfileSettingsView').then((m) => ({ default: m.ProfileSettingsView })));
+const AdminPanel = lazyWithReload(() => import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel })));
+const TrueFalseGame = lazyWithReload(() => import('./components/TrueFalseGame').then((m) => ({ default: m.TrueFalseGame })));
+const PairsGame = lazyWithReload(() => import('./components/PairsGame').then((m) => ({ default: m.PairsGame })));
+const MyCertificates = lazyWithReload(() => import('./components/MyCertificates').then((m) => ({ default: m.MyCertificates })));
 
 function ScreenFallback() {
   return (

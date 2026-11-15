@@ -137,6 +137,12 @@ export function installErrorReporting(): void {
   window.addEventListener('error', (e) => {
     // pomijamy błędy wczytywania obrazków/skryptów z zewnątrz i rozszerzeń przeglądarki
     if (!e.message || /ResizeObserver|Script error|extension:\/\//i.test(e.message)) return;
+    // Błędy wstrzyknięte przez wbudowane przeglądarki aplikacji (Messenger, Facebook, Instagram: „iabjs://”,
+    // „Java object is gone”) — nie pochodzą z naszego kodu.
+    const stack = e.error instanceof Error ? e.error.stack ?? '' : `${e.filename}`;
+    if (/iabjs:\/\/|Java object is gone|webkit-masked-url|chrome-extension|moz-extension/i.test(`${e.message} ${stack}`)) return;
+    // Plik ze starej wersji po wydaniu: aplikacja sama się przeładowuje (lazyWithReload) — to nie awaria.
+    if (/dynamically imported module|Importing a module script failed|error loading dynamically/i.test(e.message)) return;
     reportAppError(e.message, e.error instanceof Error ? e.error.stack : `${e.filename}:${e.lineno}`);
   });
   window.addEventListener('unhandledrejection', (e) => {

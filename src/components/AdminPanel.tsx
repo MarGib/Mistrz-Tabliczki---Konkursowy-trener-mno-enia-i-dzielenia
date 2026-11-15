@@ -18,6 +18,7 @@ import {
   fetchDbUsage,
   fetchHostingInfo,
   hasFreshAdminToken,
+  ensureAdminToken,
   listAccounts,
   listAppErrors,
   listDevices,
@@ -420,18 +421,9 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
               <p className="text-sm">
                 Zalogowano: <b>{session.email}</b>
                 <span className="block text-xs text-[var(--th-text-muted)]">Dane z {fmtTime(loadedAt)}</span>
-                {!tokenOk && (
-                  <span className="block text-xs text-amber-600">
-                    Reset haseł i zużycie bazy wymagają świeżego logowania Google (ważne ok. godziny).
-                  </span>
-                )}
+
               </p>
               <div className="flex flex-wrap gap-2">
-                {!tokenOk && (
-                  <button type="button" onClick={signIn} disabled={busy} className={btnPrimary}>
-                    <LogIn className="w-4 h-4" aria-hidden="true" /> Zaloguj ponownie
-                  </button>
-                )}
                 <button type="button" onClick={() => void refresh()} className={btnGhost}>
                   <RefreshCw className="w-4 h-4" aria-hidden="true" /> Odśwież
                 </button>
@@ -566,9 +558,21 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                 <AdminBackup demo={Boolean(demo)} />
                 {!tokenOk && !usage && (
                   <div className={`${card} space-y-2`}>
-                    <p className="text-sm">Zużycie bazy pobieramy z Google Cloud — potrzebne świeże logowanie Google.</p>
-                    <button type="button" onClick={signIn} disabled={busy} className={btnPrimary}>
-                      <LogIn className="w-4 h-4" aria-hidden="true" /> Zaloguj i pokaż zużycie
+                    <p className="text-sm">Zużycie bazy pobieramy z Google Cloud.</p>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void ensureAdminToken()
+                          .then(() => {
+                            setTokenTick((t) => t + 1);
+                            return loadUsage();
+                          })
+                          .catch((e) => setUsageError(e instanceof Error ? e.message : String(e)))
+                      }
+                      className={btnPrimary}
+                    >
+                      <RefreshCw className="w-4 h-4" aria-hidden="true" /> Pokaż zużycie
                     </button>
                   </div>
                 )}
