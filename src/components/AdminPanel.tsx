@@ -96,6 +96,28 @@ const TOPIC_PL: Record<string, string> = {
 
 type Tab = 'przeglad' | 'weryfikacja' | 'aktywnosc' | 'baza' | 'hosting' | 'wydania' | 'pomoc' | 'bledy' | 'konta' | 'logowania' | 'admini';
 
+interface PanelData {
+  at: number;
+  accounts: AdminAccountRow[];
+  events: LoginEventRow[];
+  devices: DeviceRow[];
+  errors: AppErrorRow[];
+  help: HelpRequestRow[];
+  hosting: HostingInfo | null;
+  status: AppStatus | null;
+  reviews: ReviewRow[];
+  owners: string[];
+  admins: AdminMemberRow[];
+  invites: AdminInviteRow[];
+}
+
+/**
+ * Ostatnio wczytane dane panelu (tylko w pamięci tej karty, nie na dysku). Ponowne otwarcie panelu
+ * w ciągu 5 min nie czyta bazy od nowa — „Odśwież” czyta zawsze.
+ */
+let panelCache: PanelData | null = null;
+const PANEL_CACHE_MS = 5 * 60_000;
+
 /** Zakładki tylko dla właściciela: kopia i zużycie bazy, komunikaty dla graczy. */
 const OWNER_TABS: Tab[] = ['baza', 'wydania'];
 
@@ -219,15 +241,41 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
+  const applyPanelData = useCallback((d: PanelData) => {
+    setAccounts(d.accounts);
+    setEvents(d.events);
+    setDevices(d.devices);
+    setErrors(d.errors);
+    setHelp(d.help);
+    setHosting(d.hosting);
+    setReviews(d.reviews);
+    setOwners(d.owners);
+    setAdmins(d.admins);
+    setInvites(d.invites);
+    if (d.status) {
+      setStatus(d.status);
+      setStatusDraft(d.status);
+    }
+    setLoadedAt(d.at);
+  }, []);
+
+  // Zmiany zrobione w panelu (np. „Załatwione”, nowy administrator) trafiają też do pamięci podręcznej,
+  // żeby po ponownym otwarciu nie pokazać starszego stanu.
+  useEffect(() => {
+    if (demo || !panelCache || panelCache.at !== loadedAt) return;
+    panelCache = { ...panelCache, accounts, events, devices, errors, help, hosting, status, reviews, owners, admins, invites };
+  }, [demo, loadedAt, accounts, events, devices, errors, help, hosting, status, reviews, owners, admins, invites]);
+
+  /** force = false: dane wczytane w ciągu ostatnich 5 min są pokazywane bez ponownego czytania bazy. */
+  const refresh = useCallback(async (force = false) => {
     setError(null);
+    if (!force && panelCache && Date.now() - panelCache.at < PANEL_CACHE_MS) {
+      applyPanelData(panelCache);
+      return;
+    }
     const soft = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
     try {
-      void soft(listReviews(), []).then(setReviews);
-      void soft(listOwnerAccounts(), []).then(setOwners);
-      void soft(listAdmins(), []).then(setAdmins);
-      void soft(listAdminInvites(), []).then(setInvites);
-      const [a, e, d, er, h, ho, st] = await Promise.all([
+      const [a, e, d, er, h, ho, st, rv, ow, ad, inv] = await Promise.all([
         listAccounts(),
         soft(listLoginEvents(), []),
         soft(listDevices(), []),
@@ -235,23 +283,31 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
         soft(listHelpRequests(), []),
         fetchHostingInfo(),
         soft(readAppStatusAdmin(), null),
+        soft(listReviews(), []),
+        soft(listOwnerAccounts(), []),
+        soft(listAdmins(), []),
+        soft(listAdminInvites(), []),
       ]);
-      setAccounts(a);
-      setEvents(e);
-      setDevices(d);
-      setErrors(er);
-      setHelp(h);
-      setHosting(ho);
-      if (st) {
-        setStatus(st);
-        setStatusDraft(st);
-      }
-      setLoadedAt(Date.now());
+      panelCache = {
+        at: Date.now(),
+        accounts: a,
+        events: e,
+        devices: d,
+        errors: er,
+        help: h,
+        hosting: ho,
+        status: st,
+        reviews: rv,
+        owners: ow,
+        admins: ad,
+        invites: inv,
+      };
+      applyPanelData(panelCache);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
     void loadUsage();
-  }, [loadUsage]);
+  }, [loadUsage, applyPanelData]);
 
   useEffect(() => {
     if (demo) {
@@ -482,7 +538,10 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
               <button type="button" onClick={signIn} className={btnGhost}>
                 Sprawdź ponownie
               </button>
-              <button type="button" onClick={() => void adminSignOut().then(() => setSession(null))} className={btnGhost}>
+              <button type="button" onClick={() => void adminSignOut().then(() => {
+                    panelCache = null;
+                    setSession(null);
+                  })} className={btnGhost}>
                 Wyloguj
               </button>
             </div>
@@ -496,10 +555,13 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
 
               </p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => void refresh()} className={btnGhost}>
+                <button type="button" onClick={() => void refresh(true)} className={btnGhost}>
                   <RefreshCw className="w-4 h-4" aria-hidden="true" /> Odśwież
                 </button>
-                <button type="button" onClick={() => void adminSignOut().then(() => setSession(null))} className={btnGhost}>
+                <button type="button" onClick={() => void adminSignOut().then(() => {
+                    panelCache = null;
+                    setSession(null);
+                  })} className={btnGhost}>
                   <LogOut className="w-4 h-4" aria-hidden="true" /> Wyloguj
                 </button>
               </div>
@@ -1091,7 +1153,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                 <div className="flex justify-between items-center mb-2">
                   <p className="text-xs text-[var(--th-text-muted)]">Ostatnie próby logowania (hasła nie są zapisywane).</p>
                   {isOwner && events.length > 0 && (
-                    <button type="button" onClick={() => void clearLoginEvents(events.map((e) => e.id)).then(refresh)} className="text-xs underline text-[var(--th-text-muted)] cursor-pointer">
+                    <button type="button" onClick={() => void clearLoginEvents(events.map((e) => e.id)).then(() => refresh(true))} className="text-xs underline text-[var(--th-text-muted)] cursor-pointer">
                       Wyczyść
                     </button>
                   )}

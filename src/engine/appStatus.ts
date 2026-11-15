@@ -9,6 +9,7 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import { type Firestore, doc, getDoc, getFirestore, serverTimestamp, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-accounts-config.json';
 import { protectApp } from './appCheck';
+import { checkedRecently, markChecked } from './syncMemory';
 
 export type AppStatusMode = 'off' | 'banner' | 'maintenance';
 export interface AppStatus {
@@ -47,14 +48,13 @@ export function cachedAppStatus(): AppStatus {
   }
 }
 
-let lastFetch = 0;
-
 export async function fetchAppStatus(force = false): Promise<AppStatus | null> {
   const cached = cachedAppStatus();
   const gap = cached.mode === 'maintenance' ? 2 * 60_000 : 15 * 60_000;
-  if (!force && Date.now() - lastFetch < gap) return null;
+  // Odstęp liczony także między uruchomieniami aplikacji — bez odczytu przy każdym otwarciu.
+  if (!force && checkedRecently('appStatus', gap)) return null;
   if (!navigator.onLine) return null;
-  lastFetch = Date.now();
+  markChecked('appStatus');
   try {
     const snap = await Promise.race([
       getDoc(doc(statusDb(), 'config', 'status')),

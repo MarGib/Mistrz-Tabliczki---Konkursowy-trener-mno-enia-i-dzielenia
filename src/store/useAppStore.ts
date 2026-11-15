@@ -105,6 +105,7 @@ import {
 import { computeTournamentMedal, updateFactMemory } from '../engine/spacedRepetition';
 import { createFreshProfile as createFreshProfileForCloud } from '../data/curriculum';
 import { formatFirebaseError } from '../firebase';
+import { checkedRecently, loadPushedFps, markChecked, savePushedFp, sinceChecked } from '../engine/syncMemory';
 import type {
   AppSettings,
   AvatarSpec,
@@ -1154,7 +1155,11 @@ export function useAppStore() {
   }, []);
   const dbPaused = () => dbPauseUntilRef.current > Date.now();
   const linkRetryTimersRef = useRef<Map<string, number>>(new Map());
-  const pushedAccountFpRef = useRef<Map<string, string>>(new Map());
+  // Odciski ostatnio wysłanych danych są pamiętane na urządzeniu — po ponownym uruchomieniu
+  // (otwarcie, odświeżenie, nowa wersja) nie wysyłamy niezmienionego konta jeszcze raz.
+  const [initialAccountFps] = useState(() => loadPushedFps('acc'));
+  const [initialCardFps] = useState(() => loadPushedFps('card'));
+  const pushedAccountFpRef = useRef<Map<string, string>>(initialAccountFps);
 
   const mergeCloudIntoLocal = useCallback(
     (local: UserProfile | undefined, cloud: UserProfile, uid: string): UserProfile => {
@@ -1171,7 +1176,7 @@ export function useAppStore() {
     []
   );
 
-  const cardFpRef = useRef<Map<string, string>>(new Map());
+  const cardFpRef = useRef<Map<string, string>>(initialCardFps);
   const [pushTick, setPushTick] = useState(0);
   const circlesEnsuredRef = useRef<Set<string>>(new Set());
   const ensureCircles = useCallback(async (profileId: string) => {
@@ -1179,6 +1184,10 @@ export function useAppStore() {
     const p = storeRef.current.profiles.find((x) => x.id === profileId);
     if (!p || !(p.circles ?? []).length) return;
     circlesEnsuredRef.current.add(profileId);
+    // Członkostwo i aktualny kod grup sprawdzamy najwyżej co 6 h (nie przy każdym uruchomieniu).
+    const checkKey = `circles:${profileId}:${(p.circles ?? []).map((c) => c.id).sort().join(',')}`;
+    if (checkedRecently(checkKey, 6 * 3600_000)) return;
+    let allOk = true;
     const login = profileLogin(p);
     for (const c of p.circles ?? []) {
       try {
@@ -1200,10 +1209,13 @@ export function useAppStore() {
         }
       } catch {
         circlesEnsuredRef.current.delete(profileId);
+        allOk = false;
       }
     }
+    if (allOk) markChecked(checkKey);
     // Wymuś publikację kart wyników w nowej bazie.
     cardFpRef.current.delete(profileId);
+    savePushedFp('card', profileId, null);
     setPushTick((t) => t + 1);
   }, []);
 
@@ -1331,6 +1343,7 @@ export function useAppStore() {
     linkFailuresRef.current.delete(profileId);
     pushFailuresRef.current.delete(profileId);
     pushedAccountFpRef.current.delete(profileId);
+    savePushedFp('acc', profileId, null);
     window.clearTimeout(linkRetryTimersRef.current.get(profileId));
     void linkAccountRef.current(profileId).then(() => setPushTick((t) => t + 1));
   }, []);
@@ -1388,8 +1401,9 @@ export function useAppStore() {
   }, [ownedCloudKey, setSyncFor]);
 
   // Wysyłanie zmian (wyniki, ustawienia, grupy) do chmury — oszczędnie (darmowy limit zapisów):
-  //  * konto: gdy przez 20 s nic się nie zmienia (kilka serii pod rząd = 1 zapis), najpóźniej po 2 min,
-  //    a od razu, gdy aplikacja się chowa,
+  //  * konto: gdy przez 45 s nic się nie zmienia (kilka serii pod rząd = 1 zapis), najpóźniej po 5 min,
+  //    a od razu, gdy aplikacja się chowa (zmiana urządzenia zawsze zaczyna się od schowania aplikacji),
+  //  * niezmienione konto i karty nie są wysyłane ponownie po uruchomieniu aplikacji (odciski na urządzeniu),
   //  * karty wyników w grupach: najwyżej co 3 min (albo przy chowaniu aplikacji),
   //  * historia serii: paczkami po 10 serii / przy chowaniu aplikacji (1 zapis na miesiąc w paczce).
   // Wszystko i tak jest najpierw zapisane na urządzeniu, więc nic nie ginie.
@@ -1417,7 +1431,7 @@ export function useAppStore() {
           continue;
         }
         const log = (pushLogRef.current.get(p.id) ?? []).filter((t) => now - t < 10 * 60_000);
-        // Grupowanie: czekamy, aż zmiany się uspokoją (20 s), ale nie dłużej niż 2 min.
+        // Grupowanie: czekamy, aż zmiany się uspokoją (45 s), ale nie dłużej niż 5 min.
         const seen = changeSeenRef.current.get(p.id);
         const change = seen && seen.fp === fp ? seen : { fp, at: now, since: seen?.since ?? now };
         changeSeenRef.current.set(p.id, change);
@@ -1426,8 +1440,8 @@ export function useAppStore() {
         const flushNow = flushNowRef.current;
         const minGap = log.length >= 20 ? 60_000 : 5000;
         const last = lastPushAtRef.current.get(p.id) ?? 0;
-        if (!flushNow && (quiet < 20_000 && waited < 120_000)) {
-          retryIn = Math.max(retryIn, Math.min(20_000 - quiet, 120_000 - waited) + 100);
+        if (!flushNow && (quiet < 45_000 && waited < 300_000)) {
+          retryIn = Math.max(retryIn, Math.min(45_000 - quiet, 300_000 - waited) + 100);
           continue;
         }
         if (!flushNow && now - last < minGap) {
@@ -1441,6 +1455,7 @@ export function useAppStore() {
         pushedAccountFpRef.current.set(p.id, fp);
         {
           const pid = p.id;
+          const sentFp = fp;
           // Zapis trafia od razu do trwałej kolejki na urządzeniu; jeśli baza nie potwierdzi go w 12 s,
           // pokazujemy spokojną informację — wyśle się sam, gdy wróci połączenie.
           const slowTimer = window.setTimeout(() => {
@@ -1453,6 +1468,7 @@ export function useAppStore() {
           void pushAccountProfile(p)
             .then(() => {
               window.clearTimeout(slowTimer);
+              savePushedFp('acc', pid, sentFp);
               pushFailuresRef.current.delete(pid);
               noteDbOk();
               if (accountSyncRef.current[pid]?.unsent) setSyncFor(pid, { state: 'synced' });
@@ -1460,6 +1476,7 @@ export function useAppStore() {
             .catch((err) => {
               window.clearTimeout(slowTimer);
               pushedAccountFpRef.current.delete(pid);
+              savePushedFp('acc', pid, null);
               noteDbError(err);
               const n = pushFailuresRef.current.get(pid) ?? 0;
               pushFailuresRef.current.set(pid, n + 1);
@@ -1487,10 +1504,14 @@ export function useAppStore() {
           if (flushNowRef.current || now - lastCards >= 180_000) {
             cardFpRef.current.set(p.id, cardFp);
             lastCardsAtRef.current.set(p.id, now);
-            void publishCircleCards(p).catch((err) => {
-              cardFpRef.current.delete(p.id);
-              noteDbError(err);
-            });
+            const cardPid = p.id;
+            void publishCircleCards(p)
+              .then(() => savePushedFp('card', cardPid, cardFp))
+              .catch((err) => {
+                cardFpRef.current.delete(cardPid);
+                savePushedFp('card', cardPid, null);
+                noteDbError(err);
+              });
           } else {
             retryIn = Math.max(retryIn, 180_000 - (now - lastCards) + 100);
           }
@@ -1820,12 +1841,15 @@ export function useAppStore() {
         const uid = await getSignedInAccountUid(login);
         if (!uid || stop) return;
         const r = await fetchAccountReview(login);
+        markChecked(`review:${pid}`);
         if (!stop) applyReview(pid, r);
       } catch {
         // brak sieci / limit bazy — sprawdzimy później
       }
     };
-    const first = window.setTimeout(() => void check(), 4000);
+    // Co 20 min — także między uruchomieniami aplikacji (bez dodatkowego odczytu przy każdym otwarciu).
+    const firstIn = Math.max(4000, 20 * 60_000 - sinceChecked(`review:${pid}`));
+    const first = window.setTimeout(() => void check(), firstIn);
     const every = window.setInterval(() => void check(), 20 * 60_000);
     return () => {
       stop = true;

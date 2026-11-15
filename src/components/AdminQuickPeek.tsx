@@ -23,7 +23,7 @@ const DOT = { ok: '🟢', warn: '🟡', bad: '🔴' } as const;
 
 function readCache(): Peek | null {
   try {
-    const raw = window.sessionStorage.getItem(CACHE_KEY);
+    const raw = window.localStorage.getItem(CACHE_KEY);
     return raw ? (JSON.parse(raw) as Peek) : null;
   } catch {
     return null;
@@ -37,7 +37,8 @@ export function AdminQuickPeek() {
 
   const load = async (force = false) => {
     const cached = readCache();
-    if (!force && cached && Date.now() - cached.at < 10 * 60_000) {
+    // Same liczby (bez danych osobowych) trzymamy 30 min także między uruchomieniami — „odśwież” czyta od razu.
+    if (!force && cached && Date.now() - cached.at < 30 * 60_000) {
       setPeek(cached);
       setState('ready');
       return;
@@ -73,7 +74,7 @@ export function AdminQuickPeek() {
         health: computeHealth(o, devices, errors, help, null, null).slice(0, 3),
       };
       try {
-        window.sessionStorage.setItem(CACHE_KEY, JSON.stringify(p));
+        window.localStorage.setItem(CACHE_KEY, JSON.stringify(p));
       } catch {
         // ignore
       }
