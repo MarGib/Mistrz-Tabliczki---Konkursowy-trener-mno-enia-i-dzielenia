@@ -184,6 +184,19 @@ function profileLogin(p: Pick<UserProfile, 'login' | 'name'>): string {
   return normalizeLogin(p.login || p.name);
 }
 
+/** Odcisk karty wyników w grupach — zmienia się tylko wtedy, gdy zmienia się to, co widać w rankingu. */
+function circleCardFingerprint(p: UserProfile): string {
+  return [
+    p.xp,
+    p.sessions?.length ?? 0,
+    p.streakDays,
+    p.name,
+    p.avatarId,
+    (p.circles ?? []).map((c) => `${c.id}:${c.share ? 1 : 0}`).join(','),
+    p.review?.state ?? '',
+  ].join('|');
+}
+
 function accountFingerprint(p: UserProfile): string {
   return [
     p.xp,
@@ -1256,6 +1269,7 @@ export function useAppStore() {
           20000,
           'Baza nie odpowiada. Spróbuj ponownie za chwilę.'
         );
+        if (res.cloudProfile) noteCloudInSync(storeRef.current.profiles.find((x) => x.id === profileId), res.cloudProfile, res.uid);
         setStore((prev) => ({
           ...prev,
           profiles: prev.profiles.map((x) =>
@@ -1490,15 +1504,7 @@ export function useAppStore() {
               window.setTimeout(() => setPushTick((t) => t + 1), delay);
             });
         }
-        const cardFp = [
-          p.xp,
-          p.sessions?.length ?? 0,
-          p.streakDays,
-          p.name,
-          p.avatarId,
-          (p.circles ?? []).map((c) => `${c.id}:${c.share ? 1 : 0}`).join(','),
-          p.review?.state ?? '',
-        ].join('|');
+        const cardFp = circleCardFingerprint(p);
         if (cardFpRef.current.get(p.id) !== cardFp) {
           const lastCards = lastCardsAtRef.current.get(p.id) ?? 0;
           if (flushNowRef.current || now - lastCards >= 180_000) {
@@ -1549,15 +1555,53 @@ export function useAppStore() {
     return () => window.clearInterval(id);
   }, []);
 
+  // Nasłuch zmian na żywo (konto, grupy) wstrzymujemy, gdy aplikacja jest schowana dłużej niż minutę:
+  // w tle nikt tego nie ogląda, a każda odebrana zmiana to odczyt z limitu bazy. Po powrocie nasłuch
+  // wraca od razu i baza dosyła tylko to, co się w międzyczasie zmieniło.
+  const [listenersAwake, setListenersAwake] = useState(
+    () => typeof document === 'undefined' || document.visibilityState !== 'hidden'
+  );
+  useEffect(() => {
+    let t = 0;
+    const onVis = () => {
+      window.clearTimeout(t);
+      if (document.visibilityState === 'visible') setListenersAwake(true);
+      else t = window.setTimeout(() => setListenersAwake(false), 60_000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.clearTimeout(t);
+    };
+  }, []);
+
+  /**
+   * Po odebraniu konta z chmury: jeśli po połączeniu nic się nie różni od chmury, zapamiętujemy to
+   * jako „już wysłane” — urządzenie nie odsyła tych samych danych z powrotem (konto i karta w grupach).
+   */
+  const noteCloudInSync = useCallback((local: UserProfile | undefined, cloud: UserProfile, uid: string) => {
+    if (!local) return;
+    const merged = mergeCloudIntoLocal(local, cloud, uid);
+    if (accountFingerprint(merged) !== accountFingerprint({ ...cloud, circles: merged.circles })) return;
+    const accFp = accountFingerprint(merged);
+    pushedAccountFpRef.current.set(local.id, accFp);
+    savePushedFp('acc', local.id, accFp);
+    // Karta w grupach należy do konta (wspólna dla urządzeń) — wysłało ją urządzenie, które zmieniło wynik.
+    const cardFp = circleCardFingerprint(merged);
+    cardFpRef.current.set(local.id, cardFp);
+    savePushedFp('card', local.id, cardFp);
+  }, [mergeCloudIntoLocal]);
+
   // Na żywo: zmiany tego samego konta z innego urządzenia.
   const activeSynced =
     Boolean(activeProfile.cloudUid) && accountSync[activeProfile.id]?.state === 'synced';
   const activeLoginKey = profileLogin(activeProfile);
   useEffect(() => {
-    if (!activeSynced) return;
+    if (!activeSynced || !listenersAwake) return;
     const activeId = activeProfile.id;
     const uid = activeProfile.cloudUid as string;
     return subscribeAccountProfile(activeLoginKey, (cloudProf) => {
+      noteCloudInSync(storeRef.current.profiles.find((x) => x.id === activeId), cloudProf, uid);
       setStore((prev) => ({
         ...prev,
         profiles: prev.profiles.map((x) =>
@@ -1566,7 +1610,7 @@ export function useAppStore() {
       }));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSynced, activeProfile.id, activeLoginKey, mergeCloudIntoLocal]);
+  }, [activeSynced, listenersAwake, activeProfile.id, activeLoginKey, mergeCloudIntoLocal, noteCloudInSync]);
 
   const createAccountWithCloud = useCallback(
     async (
@@ -2056,14 +2100,22 @@ export function useAppStore() {
   // Wyniki członków wszystkich grup aktywnego konta + powiadomienia o wyprzedzeniu.
   const [playersByCircle, setPlayersByCircle] = useState<Record<string, CirclePlayerCard[]>>({});
   const circlesKey = activeCircles.map((c) => c.id).join(',');
+  // XP członków z ostatniej odebranej listy (do powiadomień „wyprzedza Cię”). Zostaje na czas pauzy
+  // nasłuchu w tle — po powrocie powiadomienia o zmianach z tego czasu pojawiają się normalnie.
+  const prevXpByCircleRef = useRef<Map<string, Map<string, number>>>(new Map());
+  const groupsScope = `${activeProfile.id}|${activeLoginKey}|${circlesKey}|${activeSynced ? 1 : 0}`;
   useEffect(() => {
     setPlayersByCircle({});
     setCircleError(null);
-    if (!activeSynced || activeCircles.length === 0) return;
+    prevXpByCircleRef.current = new Map();
+  }, [groupsScope]);
+  useEffect(() => {
+    if (!activeSynced || !listenersAwake || activeCircles.length === 0) return;
     const meId = activeProfile.id;
     const unsubs = activeCircles.map((circle) => {
-      const prevXp = new Map<string, number>();
-      let first = true;
+      const prevXp = prevXpByCircleRef.current.get(circle.id) ?? new Map<string, number>();
+      prevXpByCircleRef.current.set(circle.id, prevXp);
+      let first = prevXp.size === 0;
       return subscribeCirclePlayers(
         activeLoginKey,
         circle.id,
@@ -2104,7 +2156,7 @@ export function useAppStore() {
     });
     return () => unsubs.forEach((u) => u());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSynced, activeProfile.id, activeLoginKey, circlesKey]);
+  }, [groupsScope, listenersAwake]);
 
   useEffect(() => {
     setCirclePlayers(effectiveCircleId ? playersByCircle[effectiveCircleId] ?? [] : []);
