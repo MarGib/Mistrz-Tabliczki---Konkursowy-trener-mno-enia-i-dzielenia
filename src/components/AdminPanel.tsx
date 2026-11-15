@@ -559,6 +559,10 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                 {!tokenOk && !usage && (
                   <div className={`${card} space-y-2`}>
                     <p className="text-sm">Zużycie bazy pobieramy z Google Cloud.</p>
+                    <p className="text-xs text-[var(--th-text-muted)]">
+                      Za pierwszym razem Google może ostrzec, że aplikacja nie jest zweryfikowana — to Twoja aplikacja: kliknij
+                      „Zaawansowane”, potem „Przejdź do…” i zezwól.
+                    </p>
                     <button
                       type="button"
                       disabled={busy}

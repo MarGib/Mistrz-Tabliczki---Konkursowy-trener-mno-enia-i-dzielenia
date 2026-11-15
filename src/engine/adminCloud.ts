@@ -71,7 +71,18 @@ function saveToken(token: string | null): void {
   }
 }
 
-function adminProvider(email?: string): GoogleAuthProvider {
+/** Samo logowanie do panelu: tylko e-mail i profil, więc Google nie pokazuje ostrzeżenia „niezweryfikowana aplikacja”. */
+function signInProvider(): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  return provider;
+}
+
+/**
+ * Poufne uprawnienia (reset haseł, odczyt zużycia bazy) prosimy osobno, dopiero gdy są potrzebne.
+ * Przy pierwszej zgodzie Google pokaże ostrzeżenie o niezweryfikowanej aplikacji — potem już nie.
+ */
+function scopedProvider(email?: string): GoogleAuthProvider {
   const provider = new GoogleAuthProvider();
   provider.addScope('https://www.googleapis.com/auth/identitytoolkit');
   provider.addScope('https://www.googleapis.com/auth/monitoring.read');
@@ -81,15 +92,16 @@ function adminProvider(email?: string): GoogleAuthProvider {
 }
 
 /**
- * Zapewnia ważny token Google. Gdy wygasł (po ok. godzinie), odnawia go sam: krótkie okienko Google
- * otwiera się i zamyka bez klikania. Wywoływać z kliknięcia (przeglądarka pozwala wtedy na okienko).
+ * Zapewnia ważny token Google z uprawnieniami do resetu haseł i zużycia bazy. Gdy go brak albo wygasł
+ * (po ok. godzinie), pobiera go: krótkie okienko Google otwiera się i zamyka bez klikania.
+ * Wywoływać z kliknięcia (przeglądarka pozwala wtedy na okienko).
  */
 export async function ensureAdminToken(): Promise<void> {
   if (hasFreshAdminToken()) return;
   const { auth } = getAdminHandle();
   const user = auth.currentUser;
   if (!user) throw new Error('Zaloguj się do panelu przez Google.');
-  const result = await reauthenticateWithPopup(user, adminProvider(user.email ?? undefined));
+  const result = await reauthenticateWithPopup(user, scopedProvider(user.email ?? undefined));
   const cred = GoogleAuthProvider.credentialFromResult(result);
   if (!cred?.accessToken) throw new Error('Google nie zwrócił tokenu — spróbuj jeszcze raz.');
   saveToken(cred.accessToken);
@@ -140,9 +152,9 @@ export async function restoreAdminSession(): Promise<AdminSession | null> {
 
 export async function adminSignIn(): Promise<AdminSession> {
   const { auth } = getAdminHandle();
-  const result = await signInWithPopup(auth, adminProvider());
-  const cred = GoogleAuthProvider.credentialFromResult(result);
-  saveToken(cred?.accessToken ?? null);
+  const result = await signInWithPopup(auth, signInProvider());
+  // Token z samego logowania nie ma poufnych uprawnień — ten pobiera ensureAdminToken().
+  saveToken(null);
   const isAdmin = await checkAdmin(result.user.uid);
   if (isAdmin) {
     try {
@@ -159,7 +171,7 @@ export async function adminSignOut(): Promise<void> {
   await signOut(getAdminHandle().auth).catch(() => {});
 }
 
-/** Token Google do resetu haseł jest ważny ok. godzinę. */
+/** Token Google z poufnymi uprawnieniami (reset haseł, zużycie bazy) jest ważny ok. godzinę. */
 export function hasFreshAdminToken(): boolean {
   return Boolean(accessToken) && Date.now() - accessTokenAt < 50 * 60_000;
 }
