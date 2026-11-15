@@ -46,6 +46,7 @@ import { PasswordInput } from './PasswordInput';
 import { InstallAppButton } from './InstallBanner';
 import { isAdminDevice } from '../engine/adminCloud';
 import { AdminQuickPeek } from './AdminQuickPeek';
+import { useOwnerAccount } from '../engine/useOwnerAccount';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { HowWePlayDialog } from './HowWePlayDialog';
 import { LEGACY_GOOGLE_SYNC_ENABLED } from '../engine/cloudSync';
@@ -145,6 +146,10 @@ export function ProfileSettingsView({
   onResetLocalData,
   onReopenProfilePicker,
 }: ProfileSettingsViewProps) {
+  const isOwnerAccount = useOwnerAccount(
+    activeProfile.cloudOptOut ? undefined : activeProfile.cloudUid,
+    normalizeLogin(activeProfile.login || activeProfile.name)
+  );
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [newName, setNewName] = useState('');
@@ -395,7 +400,7 @@ export function ProfileSettingsView({
             🗺️ Jak gramy (ścieżka z kropkami)
           </button>
           {showRules && <HowWePlayDialog profileId={activeProfile.id} enabled forceOpen onClose={() => setShowRules(false)} />}
-          {isAdminDevice() && <AdminQuickPeek />}
+          {(isAdminDevice() || isOwnerAccount) && <AdminQuickPeek />}
           {!activeProfile.cloudUid && (
             <p className="text-[11px] text-[var(--th-text-muted)] -mt-2">
               To konto nie jest jeszcze w chmurze — „Wyloguj” wróci do wyboru kont, a wyniki zostaną na tym urządzeniu.

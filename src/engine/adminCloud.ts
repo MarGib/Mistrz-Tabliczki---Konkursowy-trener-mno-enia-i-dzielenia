@@ -551,6 +551,23 @@ export async function listReviews(): Promise<ReviewRow[]> {
     .sort((a, b) => b.updatedAtMs - a.updatedAtMs);
 }
 
+/* ───────────── Konta gracza właściciela (skrót do panelu w Koncie) ───────────── */
+
+/** Identyfikatory kont gracza oznaczonych jako „moje konto”. */
+export async function listOwnerAccounts(): Promise<string[]> {
+  const { db } = getAdminHandle();
+  const snap = await getDocs(collection(db, 'ownerAccounts'));
+  return snap.docs.map((d) => d.id);
+}
+
+/** Oznacza konto gracza jako konto właściciela: na każdym urządzeniu zobaczy w Koncie skrót do panelu. */
+export async function setOwnerAccount(uid: string, on: boolean): Promise<void> {
+  const { db } = getAdminHandle();
+  const ref = doc(db, 'ownerAccounts', uid);
+  if (on) await setDoc(ref, { at: serverTimestamp() });
+  else await deleteDoc(ref);
+}
+
 /** Decyzja opiekuna: zwolnij (OK), zaufaj na stałe, zablokuj. */
 export async function decideReview(
   uid: string,

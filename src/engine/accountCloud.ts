@@ -612,6 +612,18 @@ export async function fetchAccountReview(login: string): Promise<AccountReview |
 }
 
 /**
+ * Czy to konto gracza należy do właściciela aplikacji (wtedy w Koncie jest skrót do panelu administratora).
+ * Znacznik ownerAccounts/{uid} ustawia tylko administrator w panelu (1 odczyt).
+ */
+export async function fetchIsOwnerAccount(login: string): Promise<boolean> {
+  const { auth, db } = getHandle(normalizeLogin(login));
+  const uid = (auth.currentUser ?? (await waitForAuthReady(auth)))?.uid;
+  if (!uid) return false;
+  const snap = await getDoc(doc(db, 'ownerAccounts', uid));
+  return snap.exists();
+}
+
+/**
  * Zgłoszenie do weryfikacji. „pending” wstrzymuje udział w rankingach do decyzji opiekuna,
  * „watch” to tylko wpis dla administratora. Nigdy nie obniża stanu (pending → watch)
  * i nic nie robi dla kont oznaczonych przez opiekuna jako zaufane.

@@ -422,7 +422,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: 'Panel administratora (rodzic)',
     lead: 'Rodzic ma osobny panel: lista kont, dziennik logowań i ustawianie nowych haseł.',
     steps: [
-      'Otwórz adres aplikacji z dopiskiem #admin na końcu albo, na swoim urządzeniu, Konto → „Panel administratora”.',
+      'Otwórz adres aplikacji z dopiskiem #admin na końcu albo Konto → „Otwórz pełny panel administratora”. Ten przycisk widać na urządzeniu, na którym logowałeś się do panelu, oraz na koncie gracza oznaczonym w panelu (Konta → „⭐ Moje konto”).',
       'Zaloguj się kontem Google właściciela aplikacji.',
       '„Konta”: login, imię, XP, liczba serii, ostatnia aktywność i grupy każdego dziecka.',
       '„Nowe hasło” przy koncie: wpisz nowy PIN lub hasło (min. 4 znaki) i przekaż go dziecku.',

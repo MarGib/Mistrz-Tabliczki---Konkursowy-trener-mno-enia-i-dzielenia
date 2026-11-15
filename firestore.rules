@@ -37,6 +37,16 @@ service cloud.firestore {
       allow list, write: if false;
     }
 
+    // Konto gracza właściciela aplikacji: w Koncie widzi skrót do panelu administratora.
+    // Gracz może tylko sprawdzić swoje konto; oznacza i odznacza wyłącznie administrator.
+    match /ownerAccounts/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list, delete: if isAdmin();
+      allow create: if isAdmin() && isValidId(uid) &&
+        incoming().keys().hasOnly(['at']) && incoming().at == request.time;
+      allow update: if false;
+    }
+
     // Dziennik prób logowania (bez haseł) — zapis dla każdego, odczyt tylko dla administratora.
     match /loginEvents/{eventId} {
       allow create: if

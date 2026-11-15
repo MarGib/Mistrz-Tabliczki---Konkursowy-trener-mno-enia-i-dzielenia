@@ -24,6 +24,8 @@ import {
   listDevices,
   listHelpRequests,
   listReviews,
+  listOwnerAccounts,
+  setOwnerAccount,
   decideReview,
   type ReviewRow,
   listLoginEvents,
@@ -181,6 +183,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
   const [errors, setErrors] = useState<AppErrorRow[]>([]);
   const [help, setHelp] = useState<HelpRequestRow[]>([]);
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
+  const [owners, setOwners] = useState<string[]>([]);
   const [hosting, setHosting] = useState<HostingInfo | null>(null);
   const [usage, setUsage] = useState<DbUsageDay[] | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -208,6 +211,7 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
     const soft = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
     try {
       void soft(listReviews(), []).then(setReviews);
+      void soft(listOwnerAccounts(), []).then(setOwners);
       const [a, e, d, er, h, ho, st] = await Promise.all([
         listAccounts(),
         soft(listLoginEvents(), []),
@@ -297,6 +301,33 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
       setNewPwd('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleOwner = async (row: AdminAccountRow) => {
+    const on = !owners.includes(row.uid);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await setOwnerAccount(row.uid, on);
+      setOwners((list) => (on ? [...list, row.uid] : list.filter((u) => u !== row.uid)));
+      setNotice(
+        on
+          ? `Konto „${row.login}” oznaczone jako Twoje. Po zalogowaniu na nie w Koncie pojawi się skrót do panelu (na innych urządzeniach do 30 min).`
+          : `Konto „${row.login}” nie jest już oznaczone jako Twoje.`
+      );
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? '';
+      setError(
+        code === 'permission-denied'
+          ? 'Baza nie pozwoliła zapisać — opublikuj najpierw nowe reguły bazy (firestore.rules) w konsoli Firebase.'
+          : err instanceof Error
+            ? err.message
+            : String(err)
+      );
     } finally {
       setBusy(false);
     }
@@ -873,21 +904,35 @@ export function AdminPanel({ onClose, demo }: AdminPanelProps) {
                           {row.xp} XP · {row.sessions} serii · ostatnio {fmtTime(row.updatedAtMs)}
                         </p>
                         {row.groups.length > 0 && <p className="text-xs text-[var(--th-text-muted)]">Grupy: {row.groups.join(', ')}</p>}
+                        {owners.includes(row.uid) && (
+                          <p className="text-xs font-semibold text-[var(--th-primary)]">⭐ Moje konto — w Koncie widać skrót do panelu</p>
+                        )}
                       </div>
-                      {resetFor !== row.login && (
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            setResetFor(row.login);
-                            setNewPwd('');
-                            setNotice(null);
-                            setError(null);
-                          }}
+                          disabled={busy || Boolean(demo)}
+                          onClick={() => void toggleOwner(row)}
                           className={btnGhost}
+                          title="Na tym koncie gracza (na każdym urządzeniu) w Koncie pojawi się skrót do panelu administratora."
                         >
-                          <KeyRound className="w-4 h-4" aria-hidden="true" /> Nowe hasło
+                          {owners.includes(row.uid) ? 'Nie moje konto' : '⭐ Moje konto'}
                         </button>
-                      )}
+                        {resetFor !== row.login && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResetFor(row.login);
+                              setNewPwd('');
+                              setNotice(null);
+                              setError(null);
+                            }}
+                            className={btnGhost}
+                          >
+                            <KeyRound className="w-4 h-4" aria-hidden="true" /> Nowe hasło
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {resetFor === row.login && resetForm(row)}
                   </div>
